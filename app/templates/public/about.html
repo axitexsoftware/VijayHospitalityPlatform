@@ -1,2 +1,560 @@
-{% extends 'public/base.html' %}{% block title %}About Vijay Utsav and Vijay Garden | Manpur, Gaya{% endblock %}{% block desc %}About Vijay Hospitality: a hotel and a banquet venue with rooms in Manpur, Gaya, Bihar.{% endblock %}
-{% block content %}<section class="sec"><div class="wrap" style="max-width:780px"><h1>About us</h1><p>Vijay Hospitality runs two properties in Manpur, Gaya, Bihar: Vijay Utsav, a hotel, and Vijay Garden, which offers hotel rooms and a landscaped banquet lawn for weddings and celebrations.</p><p>We focus on clean rooms, warm service and dependable security so guests and families can relax.</p></div></section>{% endblock %}
+{% extends 'public/base.html' %}
+
+{% block title %}About Us | Vijay Hospitality, Gaya{% endblock %}
+
+{% block desc %}Discover Vijay Hospitality, home to Vijay Utsav and Vijay Garden in Manpur, Gaya, Bihar.{% endblock %}
+
+{% block head %}
+<style>
+/* ABOUT PAGE */
+.vh-about {
+    background: #f8f5ef;
+    color: #302522;
+    overflow: hidden;
+    font-family: inherit;
+}
+
+.vh-about * {
+    box-sizing: border-box;
+}
+
+/* HERO SECTION */
+.vh-hero {
+    padding: 75px 6% 85px;
+    background: #f8f5ef;
+}
+
+.vh-hero-inner {
+    max-width: 1250px;
+    margin: auto;
+    display: grid;
+    grid-template-columns: 1fr 1.05fr;
+    align-items: center;
+    gap: 65px;
+}
+
+.vh-eyebrow {
+    color: #a66b43;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 23px;
+}
+
+.vh-hero h1 {
+    font-family: Georgia, serif;
+    font-size: clamp(46px, 5.5vw, 76px);
+    font-weight: 400;
+    line-height: 1.12;
+    margin: 0 0 25px;
+    color: #302522;
+}
+
+.vh-hero h1 span {
+    color: #a66b43;
+    font-style: italic;
+}
+
+.vh-hero-text {
+    color: #70655e;
+    font-size: 16px;
+    line-height: 1.95;
+    max-width: 510px;
+    margin-bottom: 30px;
+}
+
+.vh-small-line {
+    width: 65px;
+    height: 2px;
+    background: #b47c50;
+    margin-bottom: 25px;
+}
+
+.vh-hero-note {
+    color: #a66b43;
+    font-size: 13px;
+    letter-spacing: 1px;
+    font-weight: 600;
+}
+
+/* HERO IMAGE */
+.vh-hero-visual {
+    position: relative;
+    padding: 0 0 30px 30px;
+}
+
+.vh-hero-img {
+    width: 100%;
+    height: 460px;
+    object-fit: cover;
+    display: block;
+    border-radius: 180px 180px 12px 12px;
+}
+
+.vh-image-label {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    background: #fff;
+    padding: 20px 27px;
+    box-shadow: 0 8px 30px rgba(0,0,0,.10);
+}
+
+.vh-image-label strong {
+    display: block;
+    font-family: Georgia, serif;
+    font-size: 21px;
+    margin-bottom: 5px;
+}
+
+.vh-image-label small {
+    color: #82746a;
+    font-size: 11px;
+    letter-spacing: 1px;
+}
+
+/* INTRO SECTION */
+.vh-intro {
+    background: #302522;
+    color: #fff;
+    padding: 65px 6%;
+}
+
+.vh-intro-inner {
+    max-width: 1050px;
+    margin: auto;
+    text-align: center;
+}
+
+.vh-intro .vh-eyebrow {
+    color: #d5a47a;
+}
+
+.vh-intro h2 {
+    font-family: Georgia, serif;
+    font-size: clamp(30px, 4vw, 46px);
+    font-weight: 400;
+    line-height: 1.35;
+    margin: 0 auto 20px;
+    max-width: 850px;
+}
+
+.vh-intro p {
+    max-width: 780px;
+    margin: auto;
+    color: #e2d7cf;
+    font-size: 15px;
+    line-height: 1.9;
+}
+
+/* PROPERTY SECTION */
+.vh-properties {
+    padding: 90px 6%;
+    background: #f8f5ef;
+}
+
+.vh-properties-inner {
+    max-width: 1250px;
+    margin: auto;
+}
+
+.vh-section-heading {
+    text-align: center;
+    margin-bottom: 48px;
+}
+
+.vh-section-heading .vh-eyebrow {
+    margin-bottom: 14px;
+}
+
+.vh-section-heading h2 {
+    font-family: Georgia, serif;
+    font-size: clamp(34px, 4vw, 48px);
+    font-weight: 400;
+    margin: 0 0 14px;
+}
+
+.vh-section-heading p {
+    color: #776b63;
+    line-height: 1.8;
+    font-size: 15px;
+}
+
+.vh-property-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 30px;
+}
+
+.vh-property-card {
+    background: #fff;
+    overflow: hidden;
+    border-radius: 5px;
+    transition: transform .35s, box-shadow .35s;
+}
+
+.vh-property-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 18px 40px rgba(48,37,34,.12);
+}
+
+.vh-property-img {
+    width: 100%;
+    height: 310px;
+    display: block;
+    object-fit: cover;
+    transition: transform .5s;
+}
+
+.vh-property-card:hover .vh-property-img {
+    transform: scale(1.04);
+}
+
+.vh-property-photo {
+    overflow: hidden;
+}
+
+.vh-property-content {
+    padding: 30px 32px 35px;
+}
+
+.vh-property-number {
+    color: #ae7950;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+}
+
+.vh-property-content h3 {
+    font-family: Georgia, serif;
+    font-size: 30px;
+    font-weight: 400;
+    margin: 12px 0;
+    color: #302522;
+}
+
+.vh-property-content p {
+    color: #756b65;
+    font-size: 14px;
+    line-height: 1.9;
+    margin: 0;
+}
+
+/* VALUES SECTION */
+.vh-values {
+    background: #eee7dc;
+    padding: 75px 6%;
+}
+
+.vh-values-inner {
+    max-width: 1150px;
+    margin: auto;
+    text-align: center;
+}
+
+.vh-values h2 {
+    font-family: Georgia, serif;
+    font-size: 40px;
+    font-weight: 400;
+    margin: 0 0 40px;
+}
+
+.vh-value-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 35px;
+}
+
+.vh-value-item {
+    padding: 20px;
+}
+
+.vh-value-icon {
+    font-size: 30px;
+    color: #a66b43;
+    margin-bottom: 15px;
+}
+
+.vh-value-item h3 {
+    font-family: Georgia, serif;
+    font-size: 23px;
+    font-weight: 400;
+    margin: 0 0 12px;
+}
+
+.vh-value-item p {
+    color: #756b65;
+    font-size: 14px;
+    line-height: 1.8;
+}
+
+/* FINAL BANNER */
+.vh-final {
+    background: #302522;
+    color: #fff;
+    padding: 65px 20px;
+    text-align: center;
+}
+
+.vh-final h2 {
+    font-family: Georgia, serif;
+    font-size: clamp(30px, 4vw, 43px);
+    font-weight: 400;
+    margin: 0 0 15px;
+}
+
+.vh-final p {
+    color: #e0d4ca;
+    line-height: 1.8;
+    font-size: 15px;
+    max-width: 650px;
+    margin: 0 auto;
+}
+
+/* RESPONSIVE */
+@media(max-width: 800px) {
+    .vh-hero-inner {
+        grid-template-columns: 1fr;
+        gap: 40px;
+    }
+
+    .vh-hero {
+        padding: 55px 6%;
+    }
+
+    .vh-hero-img {
+        height: 350px;
+    }
+
+    .vh-property-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .vh-value-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .vh-properties {
+        padding: 65px 6%;
+    }
+}
+
+@media(max-width: 480px) {
+    .vh-hero h1 {
+        font-size: 43px;
+    }
+
+    .vh-hero-img {
+        height: 280px;
+    }
+
+    .vh-property-img {
+        height: 240px;
+    }
+
+    .vh-property-content {
+        padding: 25px;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="vh-about">
+
+    <!-- HERO -->
+    <section class="vh-hero">
+        <div class="vh-hero-inner">
+
+            <div>
+                <div class="vh-eyebrow">Welcome to Vijay Hospitality</div>
+
+                <h1>
+                    More Than<br>
+                    Just A Stay,<br>
+                    <span>A Feeling.</span>
+                </h1>
+
+                <div class="vh-small-line"></div>
+
+                <p class="vh-hero-text">
+                    At Vijay Hospitality, we believe that every stay
+                    and every celebration deserves something special.
+                    We bring together comfort, thoughtful service
+                    and welcoming spaces to create memorable experiences.
+                </p>
+
+                <div class="vh-hero-note">
+                    MANPUR, GAYA · BIHAR
+                </div>
+            </div>
+
+            <div class="vh-hero-visual">
+                <img
+                    class="vh-hero-img"
+                    src="https://images.unsplash.com/photo-1611892440504-42a792e24d32?auto=format&fit=crop&w=1100&q=85"
+                    alt="Elegant hotel room"
+                >
+
+                <div class="vh-image-label">
+                    <strong>Vijay Hospitality</strong>
+                    <small>COMFORT · CARE · CELEBRATIONS</small>
+                </div>
+            </div>
+
+        </div>
+    </section>
+
+
+    <!-- INTRODUCTION -->
+    <!-- <section class="vh-intro">
+        <div class="vh-intro-inner">
+
+            <div class="vh-eyebrow">Our Story</div>
+
+            <h2>
+                Creating Comfortable Stays
+                & Beautiful Memories.
+            </h2>
+
+            <p>
+                Located in Manpur, Gaya, Bihar, Vijay Hospitality
+                brings together two distinctive destinations:
+                Vijay Utsav and Vijay Garden.
+
+                From relaxing hotel stays to joyful weddings
+                and family celebrations, we aim to make every
+                experience comfortable, welcoming and memorable.
+            </p>
+
+        </div>
+    </section> -->
+
+
+    <!-- OUR PROPERTIES -->
+    <section class="vh-properties">
+        <div class="vh-properties-inner">
+
+            <div class="vh-section-heading">
+                <div class="vh-eyebrow">Discover Our Places</div>
+
+                <h2>Two Destinations, One Promise</h2>
+
+                <p>
+                    Thoughtfully designed spaces for stays
+                    and life's special occasions.
+                </p>
+            </div>
+
+            <div class="vh-property-grid">
+
+                <!-- VIJAY UTSAV -->
+                <div class="vh-property-card">
+
+                    <div class="vh-property-photo">
+                        <img
+                            class="vh-property-img"
+                            src="https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=1000&q=85"
+                            alt="Hotel exterior"
+                            loading="lazy"
+                        >
+                    </div>
+
+                    <div class="vh-property-content">
+                        <div class="vh-property-number">
+                            01 — HOTEL & STAY
+                        </div>
+
+                        <h3>Vijay Utsav</h3>
+
+                        <p>
+                            Discover a welcoming place to relax
+                            and unwind. Enjoy comfortable rooms,
+                            friendly hospitality and a pleasant
+                            atmosphere for your stay in Gaya.
+                        </p>
+                    </div>
+
+                </div>
+
+
+                <!-- VIJAY GARDEN -->
+                <div class="vh-property-card">
+
+                    <div class="vh-property-photo">
+                        <img
+                            class="vh-property-img"
+                            src="https://images.unsplash.com/photo-1519167758481-83f550bb49b3?auto=format&fit=crop&w=1000&q=85"
+                            alt="Beautiful wedding and celebration venue"
+                            loading="lazy"
+                        >
+                    </div>
+
+                    <div class="vh-property-content">
+                        <div class="vh-property-number">
+                            02 — EVENTS & CELEBRATIONS
+                        </div>
+
+                        <h3>Vijay Garden</h3>
+
+                        <p>
+                            Make your special occasions memorable
+                            in a beautiful landscaped setting.
+                            An inviting venue for weddings,
+                            celebrations and family gatherings.
+                        </p>
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+
+    <!-- OUR VALUES -->
+    <section class="vh-values">
+        <div class="vh-values-inner">
+
+            <div class="vh-eyebrow">What Makes Us Special</div>
+
+            <h2>Our Promise to Every Guest</h2>
+
+            <div class="vh-value-grid">
+
+                <div class="vh-value-item">
+                    <div class="vh-value-icon">✦</div>
+                    <h3>Comfort</h3>
+                    <p>
+                        Welcoming spaces designed to make
+                        every guest feel relaxed.
+                    </p>
+                </div>
+
+                <div class="vh-value-item">
+                    <div class="vh-value-icon">♡</div>
+                    <h3>Warm Hospitality</h3>
+                    <p>
+                        Friendly service and thoughtful care
+                        throughout your experience.
+                    </p>
+                </div>
+
+                <div class="vh-value-item">
+                    <div class="vh-value-icon">✧</div>
+                    <h3>Memorable Moments</h3>
+                    <p>
+                        Beautiful settings for meaningful
+                        stays and special celebrations.
+                    </p>
+                </div>
+
+            </div>
+        </div>
+    </section>
+</div>
+
+{% endblock %}

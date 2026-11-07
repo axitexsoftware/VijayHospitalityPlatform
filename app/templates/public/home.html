@@ -2,7 +2,315 @@
 {% block title %}Hotel and Banquet Venue in Manpur, Gaya | Vijay Hospitality{% endblock %}
 {% block desc %}Book AC and Non-AC hotel rooms in Manpur, Gaya near Sikhar More. Vijay Utsav hotel and Vijay Garden banquet venue. Check live availability.{% endblock %}
 {% block head %}<script type="application/ld+json">{{ ld|tojson }}</script>{% endblock %}
-{% block hero %}<section class="hero" {% if slides|length>1 %}data-slider{% endif %}>{% if slides %}<div class="hero-slides">{% for slide in slides %}<div class="hero-slide {{'active' if loop.first}}" data-title="{{slide.title or ''}}" data-link="{{slide.link_url or ''}}"><img src="{{url_for('static',filename=slide.path)}}" alt="{{slide.caption or slide.title or 'Vijay Hospitality property'}}" {% if loop.first %}fetchpriority="high"{% else %}loading="lazy"{% endif %}></div>{% endfor %}</div>{% else %}{{ m.pic('home','Vijay Utsav Hall hotel building with a paved lawn, Manpur, Gaya','100vw',true) }}{% endif %}<div class="wrap"><span class="eyebrow">Manpur · Gaya · Bihar</span><h1>Comfortable stays and grand celebrations.</h1><p class="lead">AC and Non-AC rooms, a landscaped banquet lawn and a virtual receptionist that checks real availability.</p>{{ s.bar({},cats,today) }}{% if slides %}<a class="btn light hero-slide-cta" data-slide-cta href="{{slides[0].link_url or '#'}}" {{'hidden' if not slides[0].link_url}}>{{slides[0].title or 'Explore'}}</a>{% endif %}</div>{% if slides|length>1 %}<div class="hero-slider-controls"><button type="button" aria-label="Previous slide" data-slide-prev>‹</button><button type="button" aria-label="Next slide" data-slide-next>›</button></div>{% endif %}</section>{% endblock %}
-{% block content %}<section class="sec"><div class="wrap"><div class="sec-h"><span class="eyebrow">Our properties</span><h2>Two places, one welcome</h2></div><div class="g2">{% for p in props %}<article class="card"><div class="in"><h3>{{p.name}}</h3><p>{{p.description or ''}}</p><p class="muted">{{p.address}}</p><a class="btn ghost" href="/properties">Details</a></div></article>{% endfor %}</div></div></section>
-<section class="sec alt"><div class="wrap"><div class="sec-h"><span class="eyebrow">Rooms</span><h2>Room categories</h2></div>{% if cats %}<div class="g3">{% for c in cats %}<article class="card">{% set photos=category_media.get(c.id,[]) %}{% if photos %}<img src="{{url_for('static',filename=photos[0].path.replace('.jpg','-480.jpg'))}}" alt="{{photos[0].caption or photos[0].title or c.name}}" loading="lazy" width="480" height="360">{% else %}{{ m.room_img(c,c.name) }}{% endif %}<div class="in"><h3>{{c.name}}</h3><p>{{c.description or ''}}</p><div class="price">{{ c.display_price_paise|inr }} <small>per night</small></div><a class="btn ghost" href="/rooms">View rooms</a></div></article>{% endfor %}</div>{% else %}<p class="muted">Room rates will be published shortly. Please use the chat or contact page.</p>{% endif %}</div></section>
-<section class="sec"><div class="wrap"><div class="cta"><div><h2>Ready to book?</h2><p>Search real availability or chat with our receptionist.</p></div><div class="acts" style="margin:0"><a class="btn light" href="/search">Check availability</a></div></div></div></section>{% endblock %}
+{% block content %}
+{# ---- EDIT HERE ---- #}
+{# Hero photo path. Look in app/static/img for your hotel photo, e.g. '/static/img/hotel.jpg' #}
+{% set hero_img = '' %}
+
+<style>
+.hm{--m:var(--maroon,#7f1a1d);--md:#4d0f12;--g:#b08d57;--gl:#e6cfa3;--line:#eadfd3;--mu:#6b625b;--cream:#f8f4ee;--ink:#221d1a;
+  background:var(--cream);color:var(--ink);overflow-x:hidden}
+.hm *{box-sizing:border-box}
+.hm-wrap{max-width:1180px;margin:0 auto;padding:0 20px}
+.hm h1,.hm h2,.hm h3,.hm h4{font-family:Georgia,"Times New Roman",serif}
+.hm-kick{display:inline-flex;align-items:center;gap:10px;font-size:.74rem;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--g)}
+.hm-kick::before{content:"";width:30px;height:1px;background:currentColor}
+.hm-head{margin:0 0 40px}
+.hm-head h2{margin:10px 0 10px;font-size:clamp(1.9rem,4vw,2.9rem);line-height:1.1}
+.hm-head p{margin:0;color:var(--mu);max-width:58ch;line-height:1.65}
+.hm-sec{padding:84px 0}
+
+/* Buttons */
+.hm-btn{display:inline-block;text-decoration:none;font-weight:700;font-size:.95rem;letter-spacing:.03em;padding:14px 26px;border-radius:6px;border:1.5px solid var(--m);transition:all .25s;cursor:pointer;font-family:inherit}
+.hm-btn.solid{background:var(--m);color:#fff}
+.hm-btn.solid:hover{background:var(--md);border-color:var(--md);transform:translateY(-2px);box-shadow:0 12px 26px rgba(127,26,29,.28)}
+.hm-btn.ghost{background:transparent;color:var(--m)}
+.hm-btn.ghost:hover{background:var(--m);color:#fff}
+.hm-btn.gold{background:var(--g);border-color:var(--g);color:#2a1a10}
+.hm-btn.gold:hover{background:#fff;border-color:#fff;transform:translateY(-2px)}
+.hm-btn:focus-visible{outline:3px solid var(--g);outline-offset:3px}
+
+/* Hero */
+.hm-hero{position:relative;min-height:680px;display:flex;align-items:center;color:#fff;padding:90px 0 170px;
+  background-color:#4d0f12;
+  background-image:linear-gradient(100deg,rgba(77,15,18,.92) 0%,rgba(77,15,18,.72) 45%,rgba(20,8,8,.45) 100%),var(--hero,none);
+  background-size:cover;background-position:center}
+.hm-hero::before{content:"";position:absolute;inset:0;background:radial-gradient(700px 320px at 88% 8%,rgba(176,141,87,.38),transparent 65%);pointer-events:none}
+.hm-hero::after{content:"";position:absolute;left:0;right:0;bottom:0;height:4px;background:linear-gradient(90deg,transparent,var(--g),transparent)}
+.hm-hero .hm-wrap{position:relative;z-index:1;width:100%}
+.hm-hero small{display:block;letter-spacing:.32em;text-transform:uppercase;font-size:.75rem;color:var(--gl);margin-bottom:18px}
+.hm-hero h1{margin:0 0 20px;font-size:clamp(2.5rem,6.5vw,4.8rem);line-height:1.04;max-width:14ch;color:#fff}
+.hm-hero h1 em{font-style:italic;color:var(--gl)}
+.hm-hero p{margin:0 0 30px;max-width:52ch;font-size:1.12rem;line-height:1.7;color:rgba(255,255,255,.88)}
+.hm-hero-btns{display:flex;gap:12px;flex-wrap:wrap}
+.hm-hero .hm-btn.ghost{color:#fff;border-color:rgba(255,255,255,.6)}
+.hm-hero .hm-btn.ghost:hover{background:#fff;color:var(--m);border-color:#fff}
+
+/* Search bar */
+.hm-search-wrap{position:relative;z-index:3;margin-top:-92px}
+.hm-search{background:#fff;border:1px solid var(--line);border-radius:14px;padding:22px 24px;box-shadow:0 28px 60px rgba(43,39,38,.18);
+  display:grid;grid-template-columns:repeat(6,1fr) auto;gap:14px;align-items:end}
+.hm-search label{display:block;font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:var(--mu);margin-bottom:7px}
+.hm-search input,.hm-search select{width:100%;font:inherit;font-size:.95rem;padding:13px 12px;border:1.5px solid var(--line);border-radius:8px;background:#fffdfa;color:var(--ink);transition:border-color .2s,box-shadow .2s}
+.hm-search input:focus,.hm-search select:focus{outline:none;border-color:var(--m);box-shadow:0 0 0 4px rgba(127,26,29,.12)}
+.hm-search .hm-btn{padding:15px 26px;height:50px}
+
+/* Stats */
+.hm-stats{display:grid;grid-template-columns:repeat(4,1fr);margin-top:40px;background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.hm-stats div{padding:26px 22px;text-align:center;border-right:1px solid var(--line)}
+.hm-stats div:last-child{border-right:0}
+.hm-stats strong{display:block;font:700 1.9rem Georgia,serif;color:var(--m);margin-bottom:4px}
+.hm-stats span{font-size:.86rem;color:var(--mu)}
+
+/* Properties */
+.hm-props{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:30px}
+.hm-prop{position:relative;border-radius:18px;overflow:hidden;min-height:400px;display:flex;flex-direction:column;justify-content:flex-end;color:#fff;padding:34px;
+  background:linear-gradient(160deg,rgba(77,15,18,.55),rgba(20,8,8,.92)),radial-gradient(400px 220px at 85% 0,rgba(176,141,87,.5),transparent 65%),#5a1215;
+  transition:transform .35s,box-shadow .35s}
+.hm-prop:hover{transform:translateY(-8px);box-shadow:0 30px 60px rgba(127,26,29,.28)}
+.hm-prop::before{content:"";position:absolute;inset:14px;border:1px solid rgba(230,207,163,.45);border-radius:12px;pointer-events:none}
+.hm-prop .mono{position:absolute;top:26px;right:34px;font:700 5.5rem/1 Georgia,serif;color:rgba(230,207,163,.9)}
+.hm-prop .tag{align-self:flex-start;background:var(--g);color:#2a1a10;font-weight:700;font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;padding:7px 14px;border-radius:3px;margin-bottom:14px}
+.hm-prop h3{margin:0 0 8px;font-size:2rem;color:#fff}
+.hm-prop p{margin:0 0 20px;color:rgba(255,255,255,.85);line-height:1.6;max-width:44ch}
+.hm-prop .row{display:flex;gap:10px;flex-wrap:wrap}
+.hm-prop .hm-btn{padding:11px 20px;font-size:.88rem}
+.hm-prop .hm-btn.ghost{color:#fff;border-color:rgba(255,255,255,.6)}
+.hm-prop .hm-btn.ghost:hover{background:#fff;color:var(--m)}
+
+/* Rooms */
+.hm-rooms{background:#fff;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.hm-room-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:30px}
+.hm-room{border:1px solid var(--line);border-top:4px solid var(--m);border-radius:10px;padding:34px 32px;background:var(--cream);position:relative;
+  box-shadow:inset 0 0 0 6px var(--cream),inset 0 0 0 7px #eadcc2;transition:transform .3s,box-shadow .3s}
+.hm-room:hover{transform:translateY(-6px);box-shadow:inset 0 0 0 6px var(--cream),inset 0 0 0 7px var(--g),0 24px 48px rgba(127,26,29,.12)}
+.hm-room h3{margin:0 0 6px;font-size:1.8rem;color:var(--m)}
+.hm-room>p{margin:0 0 18px;color:var(--mu);font-style:italic;line-height:1.55}
+.hm-price{display:flex;align-items:baseline;gap:8px;margin-bottom:18px}
+.hm-price small{color:var(--mu);font-size:.85rem}
+.hm-price strong{font:700 2.6rem/1 Georgia,serif;color:var(--m)}
+.hm-price span{color:var(--mu);font-size:.9rem}
+.hm-room ul{list-style:none;margin:0 0 24px;padding:18px 0 0;border-top:1px dashed var(--line);display:grid;grid-template-columns:1fr 1fr;gap:10px 14px}
+.hm-room li{display:flex;align-items:center;gap:9px;font-size:.92rem}
+.hm-room li::before{content:"✓";flex:none;display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:#fbeee4;color:#e8641e;font-size:.68rem;font-weight:800}
+.hm-note{margin:22px 0 0;color:var(--mu);font-size:.88rem}
+
+/* Features */
+.hm-feat{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:22px}
+.hm-f{background:#fff;border:1px solid var(--line);border-radius:12px;padding:28px 26px;transition:transform .3s,box-shadow .3s,border-color .3s}
+.hm-f:hover{transform:translateY(-5px);border-color:var(--g);box-shadow:0 18px 40px rgba(43,39,38,.10)}
+.hm-ico{width:54px;height:54px;border-radius:50%;border:1px solid var(--g);display:grid;place-items:center;color:var(--m);margin-bottom:16px;background:linear-gradient(135deg,#fff,#fbf3ea)}
+.hm-ico svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.hm-f h4{margin:0 0 6px;font-size:1.2rem;color:var(--m)}
+.hm-f p{margin:0;color:var(--mu);line-height:1.6;font-size:.94rem}
+
+/* Events band */
+.hm-event{position:relative;color:#fff;text-align:center;padding:100px 20px;
+  background:linear-gradient(rgba(77,15,18,.9),rgba(40,8,10,.94)),radial-gradient(600px 300px at 50% 0,rgba(176,141,87,.45),transparent 70%),#4d0f12}
+.hm-event::before,.hm-event::after{content:"";position:absolute;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--g),transparent)}
+.hm-event::before{top:14px}.hm-event::after{bottom:14px}
+.hm-event h2{margin:12px 0 14px;font-size:clamp(2rem,4.5vw,3.3rem);color:#fff;line-height:1.1}
+.hm-event p{margin:0 auto 28px;max-width:58ch;color:rgba(255,255,255,.86);line-height:1.7}
+.hm-event .hm-kick{color:var(--gl)}
+
+/* Steps */
+.hm-steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:26px;counter-reset:s}
+.hm-step{text-align:center;padding:10px 14px;counter-increment:s}
+.hm-step::before{content:counter(s);display:grid;place-items:center;width:62px;height:62px;margin:0 auto 16px;border-radius:50%;border:1.5px solid var(--g);font:700 1.5rem Georgia,serif;color:var(--m);background:#fff;box-shadow:0 0 0 6px var(--cream),0 0 0 7px var(--line)}
+.hm-step h4{margin:0 0 6px;font-size:1.2rem}
+.hm-step p{margin:0;color:var(--mu);line-height:1.6;font-size:.94rem}
+
+/* CTA */
+.hm-cta{margin:0 0 90px;background:linear-gradient(135deg,#7f1a1d,var(--md));color:#fff;border-radius:20px;padding:52px 48px;border:1px solid var(--g);outline:1px solid rgba(176,141,87,.5);outline-offset:-9px;
+  display:flex;align-items:center;justify-content:space-between;gap:28px;flex-wrap:wrap}
+.hm-cta h2{margin:0 0 8px;font-size:clamp(1.8rem,3.5vw,2.5rem);color:#fff}
+.hm-cta p{margin:0;color:rgba(255,255,255,.86);max-width:52ch;line-height:1.6}
+
+/* Scroll reveal */
+.hm-js .rv{opacity:0;transform:translateY(26px);transition:opacity .7s ease,transform .7s ease}
+.hm-js .rv.in{opacity:1;transform:none}
+
+@media (max-width:1020px){.hm-search{grid-template-columns:repeat(3,1fr)}.hm-search .hm-btn{grid-column:1/-1;width:100%}}
+@media (max-width:720px){
+  .hm-hero{padding:70px 0 150px;min-height:0}
+  .hm-search{grid-template-columns:1fr 1fr;padding:18px}
+  .hm-stats{grid-template-columns:1fr 1fr}
+  .hm-stats div:nth-child(2){border-right:0}
+  .hm-stats div:nth-child(-n+2){border-bottom:1px solid var(--line)}
+  .hm-sec{padding:64px 0}
+  .hm-cta{padding:38px 26px}
+  .hm-room ul{grid-template-columns:1fr}
+}
+@media (max-width:460px){.hm-search{grid-template-columns:1fr}.hm-wrap{padding:0 16px}}
+@media (prefers-reduced-motion:reduce){.hm *{transition:none!important}.hm-js .rv{opacity:1;transform:none}}
+</style>
+
+<div class="hm">
+
+  <!-- HERO -->
+  <section class="hm-hero" {% if hero_img %}style="--hero:url('{{ hero_img }}')"{% endif %}>
+    <div class="hm-wrap">
+      <small>Manpur &middot; Gaya &middot; Bihar</small>
+      <h1>Comfortable stays and <em>grand</em> celebrations.</h1>
+      <p>AC and Non-AC rooms, a landscaped banquet lawn and a virtual receptionist that checks real availability.</p>
+      <div class="hm-hero-btns">
+        <a class="hm-btn gold" href="/book">Book a room</a>
+        <a class="hm-btn ghost" href="/rooms">View rooms and rates</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- SEARCH -->
+  <div class="hm-wrap hm-search-wrap">
+    {# IMPORTANT: the name="..." values below must match your old search form. Check them once. #}
+    <form class="hm-search" method="get" action="/book">
+      <div><label for="hs-in">Check-in</label><input id="hs-in" type="date" name="check_in"></div>
+      <div><label for="hs-out">Check-out</label><input id="hs-out" type="date" name="check_out"></div>
+      <div><label for="hs-ad">Adults</label><input id="hs-ad" type="number" name="adults" min="1" value="2"></div>
+      <div><label for="hs-ch">Children</label><input id="hs-ch" type="number" name="children" min="0" value="0"></div>
+      <div><label for="hs-rt">Room type</label>
+        <select id="hs-rt" name="room_type">
+          <option value="">Any</option>
+          <option value="ac">AC</option>
+          <option value="non-ac">Non-AC</option>
+        </select>
+      </div>
+      <div><label for="hs-bd">Budget / night (₹)</label><input id="hs-bd" type="number" name="budget" min="0" placeholder="Optional"></div>
+      <button class="hm-btn solid" type="submit">Search rooms</button>
+    </form>
+  </div>
+
+  <div class="hm-wrap">
+    <div class="hm-stats rv">
+      <div><strong>2</strong><span>Venues in Manpur</span></div>
+      <div><strong>AC + Non-AC</strong><span>Rooms for every budget</span></div>
+      <div><strong>24 hrs</strong><span>Security and reception</span></div>
+      <div><strong>12:00 PM</strong><span>Check-in and check-out</span></div>
+    </div>
+  </div>
+
+  <!-- PROPERTIES -->
+  <section class="hm-sec">
+    <div class="hm-wrap">
+      <div class="hm-head rv">
+        <span class="hm-kick">Our properties</span>
+        <h2>Two places, one welcome</h2>
+        <p>Stay in comfort at Vijay Utsav, or celebrate under the open sky at Vijay Garden.</p>
+      </div>
+      <div class="hm-props">
+        <article class="hm-prop rv">
+          <span class="mono">U</span>
+          <span class="tag">Hotel</span>
+          <h3>Vijay Utsav</h3>
+          <p>Hotel in Manpur, Gaya with AC and Non-AC rooms. Vijay Utsav Hall, South of Sikhar More, Post Baragandhar.</p>
+          <div class="row"><a class="hm-btn gold" href="/rooms">View rooms</a><a class="hm-btn ghost" href="/properties">Details</a></div>
+        </article>
+        <article class="hm-prop rv">
+          <span class="mono">G</span>
+          <span class="tag">Hotel, banquet and events</span>
+          <h3>Vijay Garden</h3>
+          <p>Hotel rooms and a landscaped banquet lawn with a stage. South of Sikhar More, Manpur, Gaya.</p>
+          <div class="row"><a class="hm-btn gold" href="/contact">Plan an event</a><a class="hm-btn ghost" href="/properties">Details</a></div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ROOMS -->
+  <section class="hm-sec hm-rooms">
+    <div class="hm-wrap">
+      <div class="hm-head rv">
+        <span class="hm-kick">Rooms</span>
+        <h2>Room categories</h2>
+        <p>Simple, clear pricing. Prices are per night and tax is added at checkout where applicable.</p>
+      </div>
+      <div class="hm-room-grid">
+        <article class="hm-room rv">
+          <h3>AC Rooms</h3>
+          <p>Cool, quiet and comfortable, ideal for families and business guests.</p>
+          <div class="hm-price"><small>from</small><strong>₹1,500</strong><span>/ night</span></div>
+          <ul><li>Air conditioning</li><li>Private bathroom</li><li>Private entrance</li><li>Housekeeping</li><li>Electronic safe</li><li>24-hour security</li></ul>
+          <a class="hm-btn solid" href="/book?room_type=ac">Check AC rooms</a>
+        </article>
+        <article class="hm-room rv">
+          <h3>Non-AC Rooms</h3>
+          <p>Clean, simple and affordable, with everything you need at a lower price.</p>
+          <div class="hm-price"><small>from</small><strong>₹900</strong><span>/ night</span></div>
+          <ul><li>Private bathroom</li><li>Private entrance</li><li>Housekeeping</li><li>Electronic safe</li><li>24-hour security</li><li>Telephone service</li></ul>
+          <a class="hm-btn solid" href="/book?room_type=non-ac">Check Non-AC rooms</a>
+        </article>
+      </div>
+      <p class="hm-note rv">Rates shown are starting prices. Live prices and availability are shown when you search your dates.</p>
+    </div>
+  </section>
+
+  <!-- WHY US -->
+  <section class="hm-sec">
+    <div class="hm-wrap">
+      <div class="hm-head rv">
+        <span class="hm-kick">Why guests choose us</span>
+        <h2>Comfort, safety and care</h2>
+      </div>
+      <div class="hm-feat">
+        <div class="hm-f rv"><span class="hm-ico"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg></span><h4>24-hour security</h4><p>Security guard and round-the-clock support for a worry-free stay.</p></div>
+        <div class="hm-f rv"><span class="hm-ico"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg></span><h4>Private and clean</h4><p>Private entrance and bathroom, with daily housekeeping.</p></div>
+        <div class="hm-f rv"><span class="hm-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="4.5" r="2"/><path d="M5 9h14M12 9v6l-3 6M12 15l3 6"/></svg></span><h4>Accessible</h4><p>Accessible parking, entrance and exit for every guest.</p></div>
+        <div class="hm-f rv"><span class="hm-ico"><svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M3 13h18"/></svg></span><h4>Business ready</h4><p>Business centre and conference hall for meetings.</p></div>
+        <div class="hm-f rv"><span class="hm-ico"><svg viewBox="0 0 24 24"><path d="M12 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM4 21a8 8 0 0 1 16 0"/></svg></span><h4>Helpful reception</h4><p>Luggage assistance, storage and guest help whenever you need it.</p></div>
+        <div class="hm-f rv"><span class="hm-ico"><svg viewBox="0 0 24 24"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></svg></span><h4>Virtual receptionist</h4><p>Chat with our receptionist to check real availability instantly.</p></div>
+      </div>
+      <div style="text-align:center;margin-top:34px" class="rv"><a class="hm-btn ghost" href="/facilities">See all facilities</a></div>
+    </div>
+  </section>
+
+  <!-- EVENTS -->
+  <section class="hm-event">
+    <div class="hm-wrap rv">
+      <span class="hm-kick">Weddings and events</span>
+      <h2>Celebrate at Vijay Garden</h2>
+      <p>A landscaped banquet lawn with a stage, plus banquet and conference halls. Share your date and guest count and our team will plan every detail with you.</p>
+      <a class="hm-btn gold" href="/contact">Plan your event</a>
+    </div>
+  </section>
+
+  <!-- STEPS -->
+  <section class="hm-sec">
+    <div class="hm-wrap">
+      <div class="hm-head rv" style="text-align:center"><span class="hm-kick">Simple booking</span><h2>Book in three steps</h2></div>
+      <div class="hm-steps">
+        <div class="hm-step rv"><h4>Choose dates</h4><p>Pick your check-in, check-out and number of guests.</p></div>
+        <div class="hm-step rv"><h4>Select a room</h4><p>See live availability and prices for AC and Non-AC rooms.</p></div>
+        <div class="hm-step rv"><h4>Confirm</h4><p>Get your booking reference and manage it anytime.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <div class="hm-wrap">
+    <div class="hm-cta rv">
+      <div>
+        <h2>Ready to book?</h2>
+        <p>Search real availability or chat with our receptionist.</p>
+      </div>
+      <a class="hm-btn gold" href="/book">Check availability</a>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  var root=document.documentElement;
+  var items=document.querySelectorAll('.hm .rv');
+  if(!('IntersectionObserver' in window)||window.matchMedia('(prefers-reduced-motion: reduce)').matches){return}
+  root.classList.add('hm-js');
+  var io=new IntersectionObserver(function(es){
+    es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}});
+  },{threshold:.12});
+  items.forEach(function(el){io.observe(el)});
+  var t=new Date().toISOString().split('T')[0];
+  var a=document.getElementById('hs-in'),b=document.getElementById('hs-out');
+  if(a&&b){a.min=t;b.min=t;a.addEventListener('change',function(){b.min=a.value||t})}
+})();
+</script>
+{% endblock %}

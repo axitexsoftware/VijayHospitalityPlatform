@@ -1,3 +1,134 @@
 {% extends 'public/base.html' %}{% import 'public/_m.html' as m %}
 {% block title %}Our Properties | Vijay Utsav and Vijay Garden, Manpur Gaya{% endblock %}{% block desc %}Vijay Utsav hotel and Vijay Garden hotel with banquet lawn in Manpur, Gaya, Bihar.{% endblock %}
-{% block content %}<section class="sec"><div class="wrap"><div class="sec-h"><h1>Our properties</h1></div><div class="g2">{% for p in props %}<article class="card"><div class="in"><span class="pill">{{p.kind}}</span><h2>{{p.name}}</h2><p>{{p.description or ''}}</p><dl class="kv"><dt>Address</dt><dd>{{p.address}}</dd>{% if p.phone %}<dt>Phone</dt><dd>{{p.phone}}</dd>{% endif %}</dl>{% if p.map_url %}<a class="btn ghost" href="{{p.map_url}}" rel="noopener">Open in Maps</a>{% endif %}</div></article>{% endfor %}</div></div></section>{% endblock %}
+{% block content %}
+{# ---- EDIT PROPERTY DETAILS HERE ---- #}
+{% set props = [
+  {"name":"Vijay Utsav","tag":"Hotel","mono":"U",
+   "desc":"Hotel in Manpur, Gaya with AC and Non-AC rooms.",
+   "address":"Vijay Utsav Hall, South of Sikhar More, Post Baragandhar, Manpur, Gaya, Bihar, India",
+   "features":["AC rooms","Non-AC rooms","Private bathroom","Housekeeping","24-hour security"],
+   "link":"/rooms","linktext":"View rooms"},
+  {"name":"Vijay Garden","tag":"Hotel, banquet and events","mono":"G",
+   "desc":"Hotel rooms and a landscaped banquet lawn with a stage.",
+   "address":"Vijay Garden, South of Sikhar More, Manpur, Gaya, Bihar, India",
+   "features":["Hotel rooms","Banquet lawn with stage","Weddings and events","Accessible parking","Security guard"],
+   "link":"/contact","linktext":"Plan an event"}
+] %}
+
+<style>
+.pp{--pp-maroon:var(--maroon,#7f1a1d);--pp-dark:#4d0f12;--pp-gold:#b08d57;--pp-line:#eadfd3;--pp-muted:#6b625b;--pp-cream:#f8f4ee;--pp-ink:#221d1a;
+  background:var(--pp-cream);color:var(--pp-ink);padding-bottom:88px}
+.pp *{box-sizing:border-box}
+.pp-wrap{max-width:1120px;margin:0 auto;padding:0 20px}
+.pp h1,.pp h2,.pp h3{font-family:Georgia,"Times New Roman",serif}
+
+/* Hero */
+.pp-hero{background:linear-gradient(135deg,#7f1a1d,var(--pp-dark));color:#fff;text-align:center;padding:76px 20px 100px;position:relative}
+.pp-hero::after{content:"";position:absolute;left:0;right:0;bottom:0;height:4px;background:linear-gradient(90deg,transparent,var(--pp-gold),transparent)}
+.pp-hero small{display:block;letter-spacing:.3em;text-transform:uppercase;font-size:.75rem;color:#e6cfa3;margin-bottom:14px}
+.pp-hero h1{margin:0 0 14px;color:#fff;font-size:clamp(2.1rem,5vw,3.4rem);line-height:1.1}
+.pp-orn{display:flex;align-items:center;justify-content:center;gap:14px;color:var(--pp-gold);margin:0 auto 16px;max-width:260px}
+.pp-orn::before,.pp-orn::after{content:"";flex:1;height:1px;background:currentColor;opacity:.7}
+.pp-hero p{margin:0 auto;max-width:56ch;color:rgba(255,255,255,.85);line-height:1.65}
+
+/* Cards */
+.pp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:32px;margin-top:-48px;position:relative;z-index:2}
+.pp-card{background:#fff;border:1px solid var(--pp-line);border-radius:8px;overflow:hidden;display:flex;flex-direction:column;
+  box-shadow:0 16px 40px rgba(43,39,38,.10);transition:transform .3s,box-shadow .3s}
+.pp-card:hover{transform:translateY(-5px);box-shadow:0 26px 54px rgba(127,26,29,.16)}
+.pp-top{position:relative;height:170px;display:grid;place-items:center;overflow:visible;
+  background:radial-gradient(300px 140px at 85% 0%,rgba(176,141,87,.45),transparent 65%),linear-gradient(135deg,#7f1a1d,#4d0f12)}
+.pp-top::before{content:"";position:absolute;inset:12px;border:1px solid rgba(230,207,163,.55);border-radius:4px;pointer-events:none}
+.pp-card{overflow:visible}
+.pp-top{border-radius:8px 8px 0 0}
+.pp-mono{font:700 4.2rem Georgia,serif;color:#e6cfa3;line-height:1;opacity:.95}
+.pp-tag{position:absolute;left:24px;bottom:-1px;transform:translateY(50%);background:var(--pp-gold);color:#2a1a10;font-weight:700;font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;padding:8px 16px;border-radius:3px;z-index:1}
+.pp-body{padding:52px 32px 30px;display:flex;flex-direction:column;gap:16px;flex:1}
+.pp-body h2{margin:0;font-size:2rem;color:var(--pp-maroon)}
+.pp-desc{margin:0;color:var(--pp-muted);font-style:italic;line-height:1.6;font-size:1.02rem}
+.pp-chips{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:8px}
+.pp-chips li{display:flex;align-items:center;gap:7px;background:var(--pp-cream);border:1px solid var(--pp-line);border-radius:999px;padding:6px 13px;font-size:.84rem}
+.pp-chips li::before{content:"✓";color:var(--pp-maroon);font-weight:800;font-size:.72rem}
+.pp-addr{display:flex;gap:14px;padding-top:16px;border-top:1px solid var(--pp-line)}
+.pp-ico{flex:none;width:38px;height:38px;border-radius:50%;border:1px solid var(--pp-gold);display:grid;place-items:center;color:var(--pp-maroon)}
+.pp-ico svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.pp-addr b{display:block;font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:var(--pp-muted);margin-bottom:3px}
+.pp-addr p{margin:0;line-height:1.6}
+.pp-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:auto;padding-top:6px}
+.pp-btn{display:block;text-align:center;text-decoration:none;font-weight:700;font-size:.9rem;letter-spacing:.03em;padding:13px 16px;border-radius:4px;border:1.5px solid var(--pp-maroon);transition:all .2s}
+.pp-btn.solid{background:var(--pp-maroon);color:#fff}
+.pp-btn.solid:hover{background:var(--pp-dark);border-color:var(--pp-dark)}
+.pp-btn.ghost{color:var(--pp-maroon);background:transparent}
+.pp-btn.ghost:hover{background:var(--pp-maroon);color:#fff}
+.pp-btn:focus-visible{outline:3px solid var(--pp-gold);outline-offset:3px}
+
+/* Bottom band */
+.pp-band{margin-top:52px;background:linear-gradient(135deg,#7f1a1d,var(--pp-dark));color:#fff;border-radius:8px;padding:36px 40px;
+  display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap;border:1px solid var(--pp-gold);outline:1px solid rgba(176,141,87,.5);outline-offset:-8px}
+.pp-band h3{margin:0 0 6px;font-size:1.6rem;color:#fff}
+.pp-band p{margin:0;color:rgba(255,255,255,.85);max-width:56ch;line-height:1.6}
+.pp-band .pp-btn{background:var(--pp-gold);border-color:var(--pp-gold);color:#2a1a10;display:inline-block}
+.pp-band .pp-btn:hover{background:#fff;border-color:#fff}
+
+@media (max-width:640px){
+  .pp-hero{padding:56px 16px 90px}
+  .pp-wrap{padding:0 16px}
+  .pp-grid{grid-template-columns:1fr}
+  .pp-body{padding:48px 22px 24px}
+  .pp-btns{grid-template-columns:1fr}
+  .pp-band{padding:28px 24px}
+}
+@media (prefers-reduced-motion:reduce){.pp-card,.pp-btn{transition:none}}
+</style>
+
+<section class="pp">
+
+  <div class="pp-hero">
+    <small>Vijay Hospitality &middot; Manpur, Gaya</small>
+    <h1>Our properties</h1>
+    <div class="pp-orn">&#10070;</div>
+    <p>Two venues, one warm welcome. Choose a comfortable hotel stay, or a beautiful garden for your wedding and celebrations.</p>
+  </div>
+
+  <div class="pp-wrap">
+
+    <div class="pp-grid">
+      {% for p in props %}
+      <article class="pp-card">
+        <div class="pp-top">
+          <span class="pp-mono">{{ p.mono }}</span>
+          <span class="pp-tag">{{ p.tag }}</span>
+        </div>
+        <div class="pp-body">
+          <h2>{{ p.name }}</h2>
+          <p class="pp-desc">{{ p.desc }}</p>
+
+          <ul class="pp-chips">
+            {% for f in p.features %}<li>{{ f }}</li>{% endfor %}
+          </ul>
+
+          <div class="pp-addr">
+            <span class="pp-ico"><svg viewBox="0 0 24 24"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></span>
+            <div><b>Address</b><p>{{ p.address }}</p></div>
+          </div>
+
+          <div class="pp-btns">
+            <a class="pp-btn solid" href="{{ p.link }}">{{ p.linktext }}</a>
+            <a class="pp-btn ghost" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query={{ p.address|urlencode }}">Get directions</a>
+          </div>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+
+    <div class="pp-band">
+      <div>
+        <h3>Ready to plan your stay?</h3>
+        <p>Check live availability and prices for AC and Non-AC rooms, or talk to our team about your event.</p>
+      </div>
+      <a class="pp-btn" href="/book">Book a room</a>
+    </div>
+
+  </div>
+</section>
+{% endblock %}

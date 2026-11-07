@@ -1,2 +1,130 @@
 {% extends 'public/base.html' %}{% block title %}Manage Your Booking | Vijay Hospitality{% endblock %}{% block robots %}<meta name="robots" content="noindex">{% endblock %}
-{% block content %}<section class="sec"><div class="wrap" style="max-width:560px"><div class="sec-h"><h1>Manage your booking</h1><p>Enter your booking reference and the mobile number used to book.</p></div><form class="form" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label class="full">Booking reference<input name="ref" required placeholder="VHABC123" autocomplete="off"></label><label class="full">Mobile number<input name="phone" type="tel" required></label><button class="btn full">Find booking</button></form></div></section>{% endblock %}
+{% block content %}
+<style>
+.lk{--lk-maroon:var(--maroon,#7f1a1d);--lk-dark:#4d0f12;--lk-gold:#b08d57;--lk-line:#eadfd3;--lk-muted:#6b625b;--lk-cream:#f8f4ee;--lk-ink:#221d1a;
+  background:var(--lk-cream);color:var(--lk-ink);padding-bottom:88px}
+.lk *{box-sizing:border-box}
+.lk-wrap{max-width:1040px;margin:0 auto;padding:0 20px}
+.lk h1,.lk h2,.lk h3{font-family:Georgia,"Times New Roman",serif}
+
+/* Hero */
+.lk-hero{background:linear-gradient(135deg,#7f1a1d,var(--lk-dark));color:#fff;text-align:center;padding:70px 20px 110px;position:relative}
+.lk-hero::after{content:"";position:absolute;left:0;right:0;bottom:0;height:4px;background:linear-gradient(90deg,transparent,var(--lk-gold),transparent)}
+.lk-hero small{display:block;letter-spacing:.3em;text-transform:uppercase;font-size:.75rem;color:#e6cfa3;margin-bottom:14px}
+.lk-hero h1{margin:0 0 14px;color:#fff;font-size:clamp(2rem,5vw,3.2rem);line-height:1.1}
+.lk-orn{display:flex;align-items:center;justify-content:center;gap:14px;color:var(--lk-gold);margin:0 auto 16px;max-width:240px}
+.lk-orn::before,.lk-orn::after{content:"";flex:1;height:1px;background:currentColor;opacity:.7}
+.lk-hero p{margin:0 auto;max-width:52ch;color:rgba(255,255,255,.85);line-height:1.65}
+
+/* Layout */
+.lk-grid{display:grid;grid-template-columns:1.25fr 1fr;gap:28px;margin-top:-56px;position:relative;z-index:2;align-items:start}
+
+/* Form card */
+.lk-card{background:#fff;border:1px solid var(--lk-line);border-top:4px solid var(--lk-maroon);border-radius:8px;padding:36px 34px 34px;
+  box-shadow:inset 0 0 0 6px #fff,inset 0 0 0 7px #eadcc2,0 18px 44px rgba(43,39,38,.10)}
+.lk-card h2{margin:0 0 6px;font-size:1.7rem;color:var(--lk-maroon)}
+.lk-card>p{margin:0 0 22px;color:var(--lk-muted);line-height:1.55}
+.lk-field{margin-bottom:18px}
+.lk-field label{display:block;font-size:.74rem;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:var(--lk-muted);margin-bottom:8px}
+.lk-in{position:relative}
+.lk-in svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);width:19px;height:19px;stroke:var(--lk-gold);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+.lk-in input{width:100%;font:inherit;font-size:1rem;padding:15px 16px 15px 46px;border:1.5px solid var(--lk-line);border-radius:6px;background:#fffdfa;color:var(--lk-ink);transition:border-color .2s,box-shadow .2s}
+.lk-in input::placeholder{color:#a79d93}
+.lk-in input:focus{outline:none;border-color:var(--lk-maroon);box-shadow:0 0 0 4px rgba(127,26,29,.12)}
+.lk-btn{width:100%;margin-top:6px;font:inherit;font-weight:700;font-size:1rem;letter-spacing:.04em;color:#fff;background:var(--lk-maroon);border:0;border-radius:6px;padding:16px;cursor:pointer;
+  box-shadow:0 10px 22px rgba(127,26,29,.28);transition:background .2s,transform .2s}
+.lk-btn:hover{background:var(--lk-dark);transform:translateY(-2px)}
+.lk-btn:focus-visible{outline:3px solid var(--lk-gold);outline-offset:3px}
+.lk-secure{display:flex;align-items:center;gap:8px;justify-content:center;margin-top:16px;font-size:.84rem;color:var(--lk-muted)}
+.lk-secure svg{width:16px;height:16px;stroke:var(--lk-maroon);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.lk-alert{background:#fbeeee;border:1px solid #e6c3c3;color:#8a1f1f;border-radius:6px;padding:12px 16px;margin-bottom:20px;font-size:.95rem}
+
+/* Side panel */
+.lk-side{display:grid;gap:20px}
+.lk-box{background:#fff;border:1px solid var(--lk-line);border-radius:8px;padding:26px 26px 22px;box-shadow:0 10px 28px rgba(43,39,38,.06)}
+.lk-box h3{margin:0 0 14px;font-size:1.2rem;color:var(--lk-maroon)}
+.lk-steps{list-style:none;margin:0;padding:0;display:grid;gap:14px;counter-reset:s}
+.lk-steps li{display:flex;gap:14px;line-height:1.5;counter-increment:s;font-size:.95rem}
+.lk-steps li::before{content:counter(s);flex:none;width:28px;height:28px;border-radius:50%;border:1px solid var(--lk-gold);display:grid;place-items:center;font:700 .85rem Georgia,serif;color:var(--lk-maroon)}
+.lk-help{background:linear-gradient(135deg,#7f1a1d,var(--lk-dark));color:#fff;border-color:var(--lk-gold)}
+.lk-help h3{color:#fff}
+.lk-help p{margin:0 0 16px;color:rgba(255,255,255,.85);line-height:1.6;font-size:.95rem}
+.lk-help a{display:inline-block;text-decoration:none;font-weight:700;font-size:.9rem;background:var(--lk-gold);color:#2a1a10;padding:11px 20px;border-radius:4px;transition:background .2s}
+.lk-help a:hover{background:#fff}
+
+@media (max-width:860px){.lk-grid{grid-template-columns:1fr}}
+@media (max-width:520px){
+  .lk-hero{padding:52px 16px 100px}
+  .lk-wrap{padding:0 16px}
+  .lk-card{padding:28px 22px}
+}
+@media (prefers-reduced-motion:reduce){.lk-btn,.lk-in input{transition:none}}
+</style>
+
+<section class="lk">
+
+  <div class="lk-hero">
+    <small>Vijay Hospitality &middot; Manpur, Gaya</small>
+    <h1>Manage your booking</h1>
+    <div class="lk-orn">&#10070;</div>
+    <p>Enter your booking reference and the mobile number used to book. We will find your reservation instantly.</p>
+  </div>
+
+  <div class="lk-wrap">
+    <div class="lk-grid">
+
+      <div class="lk-card">
+        <h2>Find your booking</h2>
+        <p>Both details are needed to keep your reservation private.</p>
+
+        {% if error %}<div class="lk-alert" role="alert">{{ error }}</div>{% endif %}
+
+        <form method="post" action="">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+          <div class="lk-field">
+            <label for="lk-ref">Booking reference</label>
+            <div class="lk-in">
+              <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+              <input id="lk-ref" type="text" name="ref" placeholder="VHABC123" autocomplete="off" required>
+            </div>
+          </div>
+
+          <div class="lk-field">
+            <label for="lk-mob">Mobile number</label>
+            <div class="lk-in">
+              <svg viewBox="0 0 24 24"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></svg>
+              <input id="lk-mob" type="tel" name="mobile" placeholder="Mobile number used to book" inputmode="numeric" required>
+            </div>
+          </div>
+
+          <button class="lk-btn" type="submit">Find booking</button>
+        </form>
+
+        <div class="lk-secure">
+          <svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+          Your details are used only to find your booking.
+        </div>
+      </div>
+
+      <aside class="lk-side">
+        <div class="lk-box">
+          <h3>How it works</h3>
+          <ol class="lk-steps">
+            <li><span>Enter the booking reference you received when you booked.</span></li>
+            <li><span>Enter the same mobile number you used for the booking.</span></li>
+            <li><span>Click <b>Find booking</b> to see your reservation details.</span></li>
+          </ol>
+        </div>
+        <div class="lk-box lk-help">
+          <h3>Need help?</h3>
+          <p>Cannot find your reference? Use the chat or contact our reception and we will help you.</p>
+          <a href="/contact">Contact us</a>
+        </div>
+      </aside>
+
+    </div>
+  </div>
+</section>
+{% endblock %}
+

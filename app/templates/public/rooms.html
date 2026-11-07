@@ -1,5 +1,221 @@
 {% extends 'public/base.html' %}{% import 'public/_m.html' as m %}
 {% block title %}Hotel Rooms in Manpur, Gaya | AC and Non-AC | Vijay Hospitality{% endblock %}{% block desc %}Browse AC and Non-AC rooms with prices, amenities and photos at Vijay Utsav and Vijay Garden, Manpur, Gaya.{% endblock %}
-{% block content %}<section class="sec"><div class="wrap"><div class="sec-h"><h1>Rooms and rates</h1><p>Prices are per night. Tax is added at checkout where applicable.</p></div>
-{% for r in rooms %}<article class="rc">{% if r.images %}<img src="{{url_for('static',filename=r.images[0].path)}}" alt="{{r.images[0].alt or r.cat_name}}" loading="lazy" width="800" height="600">{% elif r.cat_images %}<img src="{{url_for('static',filename=r.cat_images[0].path.replace('.jpg','-480.jpg'))}}" alt="{{r.cat_images[0].caption or r.cat_name}}" loading="lazy" width="480" height="360">{% else %}{{ m.room_img(r,r.cat_name+' room '+r.number) }}{% endif %}<div class="in"><span class="pill">{{r.pname}}</span><h3>{{r.cat_name}} · Room {{r.number}}</h3><p class="muted">{{r.description or r.cat_desc or ''}}</p><p class="muted">Up to {{r.max_adults}} adults, {{r.max_children}} children</p></div><div class="side"><div class="price">{{ r.display_price_paise|inr }} <small>/ night</small></div><a class="btn" href="/rooms/{{r.id}}">View room</a></div></article>
-{% else %}<div class="card"><div class="in"><h3>Rooms coming soon</h3><p>Our room listing is being prepared. Please contact us to book.</p><a class="btn ghost" href="/contact">Contact us</a></div></div>{% endfor %}</div></section>{% endblock %}
+{% block content %}
+<style>
+.rm{--rm-maroon:var(--maroon,#7f1a1d);--rm-dark:#5f1114;--rm-orange:var(--orange,#e8641e);--rm-line:var(--line,#eadfd3);--rm-muted:var(--mu,#6b625b);--rm-cream:var(--cream,#f8f4ee);background:var(--rm-cream);padding-bottom:88px}
+.rm *{box-sizing:border-box}
+.rm-wrap{max-width:1200px;margin:0 auto;padding:0 20px}
+
+/* Hero */
+.rm-hero{background:radial-gradient(700px 260px at 90% 0%,rgba(232,100,30,.45),transparent 60%),linear-gradient(135deg,#7f1a1d,#4d0f12);color:#fff;padding:72px 0 96px}
+.rm-eyebrow{display:inline-block;font-size:.75rem;font-weight:700;letter-spacing:.18em;text-transform:uppercase;background:rgba(255,255,255,.14);padding:7px 14px;border-radius:999px;margin-bottom:16px}
+.rm-hero h1{margin:0 0 10px;color:#fff;font-size:clamp(2.2rem,5vw,3.6rem);line-height:1.08}
+.rm-hero p{margin:0;color:rgba(255,255,255,.85);font-size:1.05rem;max-width:56ch}
+.rm-trust{display:flex;flex-wrap:wrap;gap:10px 22px;margin-top:26px;font-size:.92rem}
+.rm-trust span{display:flex;align-items:center;gap:8px}
+.rm-trust span::before{content:"✓";display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--rm-orange);font-size:.7rem;font-weight:700}
+
+/* Jump bar */
+.rm-jump{position:relative;margin-top:-30px;z-index:2;background:#fff;border:1px solid var(--rm-line);border-radius:18px;padding:12px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;box-shadow:0 14px 34px rgba(43,39,38,.08)}
+.rm-jump b{font-size:.78rem;text-transform:uppercase;letter-spacing:.1em;color:var(--rm-muted);margin-right:4px}
+.rm-jump a{text-decoration:none;font-weight:700;font-size:.9rem;padding:9px 18px;border-radius:999px;border:1.5px solid var(--rm-maroon);color:var(--rm-maroon);transition:all .2s}
+.rm-jump a:hover,.rm-jump a:focus-visible{background:var(--rm-maroon);color:#fff;outline:none}
+
+/* Category section */
+.rm-cat{margin-top:56px;scroll-margin-top:90px}
+.rm-cat-head{display:grid;grid-template-columns:1.1fr 1fr;gap:28px;align-items:stretch;margin-bottom:28px}
+.rm-cat-title{display:flex;flex-direction:column;justify-content:center}
+.rm-kicker{display:inline-flex;align-items:center;gap:8px;font-size:.75rem;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--rm-orange);margin-bottom:10px}
+.rm-kicker::before{content:"";width:28px;height:2px;background:var(--rm-orange)}
+.rm-cat-title h2{margin:0 0 10px;font-size:clamp(1.8rem,4vw,2.6rem);line-height:1.1}
+.rm-cat-title p{margin:0 0 14px;color:var(--rm-muted);line-height:1.6;max-width:50ch}
+.rm-from{display:inline-flex;align-items:baseline;gap:8px;font-size:.9rem;color:var(--rm-muted)}
+.rm-from strong{color:var(--rm-maroon);font-size:1.5rem}
+.rm-fac{background:#fff;border:1px solid var(--rm-line);border-radius:22px;padding:24px 26px}
+.rm-fac h3{margin:0 0 14px;font-size:1.05rem;color:var(--rm-maroon)}
+.rm-fac ul{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:10px 16px}
+.rm-fac li{display:flex;align-items:center;gap:10px;font-size:.93rem}
+.rm-fac li::before{content:"✓";flex:none;display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:#fbeee4;color:var(--rm-orange);font-size:.7rem;font-weight:800}
+
+/* Cards */
+.rm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:26px}
+.rm-card{background:#fff;border:1px solid var(--rm-line);border-radius:24px;overflow:hidden;display:flex;flex-direction:column;transition:transform .3s,box-shadow .3s,border-color .3s}
+.rm-card:hover{transform:translateY(-6px);border-color:var(--rm-orange);box-shadow:0 24px 50px rgba(127,26,29,.14)}
+.rm-media{position:relative;aspect-ratio:4/3;overflow:hidden;background:#efe7db}
+.rm-media img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .6s}
+.rm-card:hover .rm-media img{transform:scale(1.06)}
+.rm-media::after{content:"";position:absolute;inset:auto 0 0 0;height:45%;background:linear-gradient(to top,rgba(20,10,8,.65),transparent);pointer-events:none}
+.rm-pill{position:absolute;z-index:1;font-weight:700;font-size:.75rem;padding:6px 12px;border-radius:999px}
+.rm-tag{left:14px;top:14px;background:rgba(255,255,255,.95);color:var(--rm-maroon)}
+.rm-type{right:14px;top:14px;background:var(--rm-orange);color:#fff}
+.rm-pricebadge{position:absolute;z-index:1;right:14px;bottom:14px;background:#fff;border-radius:14px;padding:8px 14px;text-align:right;line-height:1.1}
+.rm-pricebadge strong{display:block;color:var(--rm-maroon);font-size:1.3rem}
+.rm-pricebadge small{color:var(--rm-muted);font-size:.72rem}
+.rm-body{padding:22px 24px 24px;display:flex;flex-direction:column;gap:12px;flex:1}
+.rm-title{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.rm-title h3{margin:0;font-size:1.3rem}
+.rm-title span{font-size:.82rem;font-weight:600;color:var(--rm-muted);white-space:nowrap}
+.rm-desc{margin:0;color:var(--rm-muted);font-size:.95rem;line-height:1.55;display: -webkit-box;-webkit-box-orient: vertical;-webkit-line-clamp: 2;line-clamp: 2;overflow: hidden}
+.rm-chips{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:8px}
+.rm-chips li{display:flex;align-items:center;gap:6px;background:var(--rm-cream);border-radius:10px;padding:6px 11px;font-size:.82rem}
+.rm-chips li::before{content:"✓";color:var(--rm-orange);font-weight:800;font-size:.75rem}
+.rm-chips li.more{color:var(--rm-maroon);font-weight:700}
+.rm-chips li.more::before{content:"+"}
+.rm-actions{margin-top:auto;padding-top:16px;border-top:1px dashed var(--rm-line);display:grid;grid-template-columns:1fr 1.4fr;gap:10px}
+.rm-btn{display:block;text-align:center;text-decoration:none;font-weight:700;font-size:.93rem;padding:12px 16px;border-radius:12px;border:2px solid var(--rm-maroon);transition:all .2s}
+.rm-btn.solid{background:var(--rm-maroon);color:#fff}
+.rm-btn.solid:hover{background:var(--rm-dark);border-color:var(--rm-dark);box-shadow:0 8px 18px rgba(127,26,29,.3)}
+.rm-btn.ghost{background:transparent;color:var(--rm-maroon)}
+.rm-btn.ghost:hover{background:var(--rm-maroon);color:#fff}
+.rm-btn:focus-visible{outline:3px solid var(--rm-orange);outline-offset:3px}
+
+/* Fallback card when a category has no rooms in the database */
+.rm-info{grid-column:1/-1;background:linear-gradient(135deg,#fff,#fbf3ea);border:1px dashed var(--rm-orange);border-radius:24px;padding:28px 30px;display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap}
+.rm-info h3{margin:0 0 4px;font-size:1.3rem}
+.rm-info p{margin:0;color:var(--rm-muted)}
+.rm-info .rm-btn{display:inline-block}
+
+/* Help */
+.rm-help{margin-top:64px;background:linear-gradient(135deg,#7f1a1d,#4d0f12);color:#fff;border-radius:24px;padding:32px 36px;display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap}
+.rm-help h3{margin:0 0 4px;font-size:1.5rem;color:#fff}
+.rm-help p{margin:0;color:rgba(255,255,255,.85)}
+.rm-help .rm-btn{background:#fff;color:var(--rm-maroon);border-color:#fff}
+.rm-help .rm-btn:hover{background:var(--rm-orange);border-color:var(--rm-orange);color:#fff}
+
+@media (max-width:900px){.rm-cat-head{grid-template-columns:1fr}}
+@media (max-width:520px){
+  .rm-hero{padding:52px 0 80px}
+  .rm-wrap{padding:0 16px}
+  .rm-grid{grid-template-columns:1fr}
+  .rm-fac ul{grid-template-columns:1fr}
+  .rm-help{padding:24px}
+}
+@media (prefers-reduced-motion:reduce){.rm-card,.rm-media img,.rm-btn,.rm-jump a{transition:none}}
+</style>
+
+{# ---- split rooms into AC and Non-AC ---- #}
+{% set ns = namespace(ac=[], non=[]) %}
+{% for r in rooms %}
+  {% if 'non' in (r.cat_name or '')|lower %}
+    {% set ns.non = ns.non + [r] %}
+  {% else %}
+    {% set ns.ac = ns.ac + [r] %}
+  {% endif %}
+{% endfor %}
+
+{# ---- EDIT TEXT AND FACILITIES HERE ---- #}
+{% set groups = [
+  {"id":"ac-rooms","label":"AC","title":"AC Rooms","rooms":ns.ac,
+   "text":"Air-conditioned rooms for a cool, quiet and comfortable stay, ideal for families and business guests.",
+   "facilities":["Air conditioning","Private bathroom","Private entrance","Housekeeping","Electronic safe","24-hour security"]},
+  {"id":"non-ac-rooms","label":"Non-AC","title":"Non-AC Rooms","rooms":ns.non,
+   "text":"Simple, clean and affordable rooms that give you everything you need at a lower price.",
+   "facilities":["Private bathroom","Private entrance","Housekeeping","Electronic safe","24-hour security","Telephone service"]}
+] %}
+
+<section class="rm">
+
+  <div class="rm-hero">
+    <div class="rm-wrap">
+      <span class="rm-eyebrow">Stay with us</span>
+      <h1>Rooms and rates</h1>
+      <p>Clean, comfortable rooms for every budget. Prices are per night. Tax is added at checkout where applicable.</p>
+      <div class="rm-trust">
+        <span>AC and Non-AC options</span>
+        <span>Private bathroom</span>
+        <span>24-hour security</span>
+        <span>Housekeeping</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="rm-wrap">
+
+    <nav class="rm-jump" aria-label="Room types">
+      <b>Jump to</b>
+      <a href="#ac-rooms">AC Rooms</a>
+      <a href="#non-ac-rooms">Non-AC Rooms</a>
+    </nav>
+
+    {% for g in groups %}
+    <section class="rm-cat" id="{{ g.id }}">
+
+      <div class="rm-cat-head">
+        <div class="rm-cat-title">
+          <span class="rm-kicker">{{ g.label }}</span>
+          <h2>{{ g.title }}</h2>
+          <p>{{ g.text }}</p>
+          {% set ps = [] %}
+          {% for r in g.rooms %}
+            {% set p = r.price or r.rate or r.price_per_night %}
+            {% if p %}{% set _ = ps.append(p|float) %}{% endif %}
+          {% endfor %}
+          {% if ps %}
+          <div class="rm-from">Starting from <strong>₹{{ '%g' % (ps|min) }}</strong> per night</div>
+          {% endif %}
+        </div>
+        <div class="rm-fac">
+          <h3>Facilities included</h3>
+          <ul>
+            {% for f in g.facilities %}<li>{{ f }}</li>{% endfor %}
+          </ul>
+        </div>
+      </div>
+
+      <div class="rm-grid">
+        {% for r in g.rooms %}
+        {% set price = r.price or r.rate or r.price_per_night %}
+        <article class="rm-card">
+          <div class="rm-media">
+            {{ m.room_img(r, r.cat_name ~ ' room ' ~ r.number) }}
+            <span class="rm-pill rm-tag">{{ r.pname }}</span>
+            <span class="rm-pill rm-type">{{ g.label }}</span>
+            {% if price %}
+            <div class="rm-pricebadge"><strong>₹{{ price }}</strong><small>per night</small></div>
+            {% endif %}
+          </div>
+          <div class="rm-body">
+            <div class="rm-title">
+              <h3>{{ r.cat_name }}</h3>
+              <span>Room {{ r.number }}</span>
+            </div>
+            {% if r.description or r.cat_desc %}
+            <p class="rm-desc">{{ r.description or r.cat_desc }}</p>
+            {% endif %}
+            {% if r.amenities %}
+            <ul class="rm-chips">
+              {% for a in r.amenities[:4] %}<li>{{ a }}</li>{% endfor %}
+              {% if r.amenities|length > 4 %}<li class="more">{{ r.amenities|length - 4 }} more</li>{% endif %}
+            </ul>
+            {% endif %}
+            <div class="rm-actions">
+              <a class="rm-btn ghost" href="/room/{{ r.id }}">Details</a>
+              <a class="rm-btn solid" href="/book?room_id={{ r.id }}">Book now</a>
+            </div>
+          </div>
+        </article>
+        {% else %}
+        <div class="rm-info">
+          <div>
+            <h3>{{ g.title }} available</h3>
+            <p>Call for today's rate and availability. Our team will help you book.</p>
+          </div>
+          <a class="rm-btn solid" href="/book">Check rate</a>
+        </div>
+        {% endfor %}
+      </div>
+
+    </section>
+    {% endfor %}
+
+    <div class="rm-help">
+      <div>
+        <h3>Not sure which room to choose?</h3>
+        <p>Tell us your dates and number of guests. Our team will suggest the best option.</p>
+      </div>
+      <a class="rm-btn" href="/contact">Talk to us</a>
+    </div>
+
+  </div>
+</section>
+{% endblock %}

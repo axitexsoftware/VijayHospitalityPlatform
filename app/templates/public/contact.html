@@ -1,2 +1,160 @@
 {% extends 'public/base.html' %}{% block title %}Contact and Directions | Vijay Hospitality, Manpur Gaya{% endblock %}{% block desc %}Address, directions and contact details for Vijay Utsav and Vijay Garden near Sikhar More, Manpur, Gaya.{% endblock %}
-{% block content %}<section class="sec"><div class="wrap"><div class="sec-h"><h1>Contact and directions</h1></div><div class="g2">{% for p in props %}<article class="card"><div class="in"><h2>{{p.name}}</h2><dl class="kv"><dt>Address</dt><dd>{{p.address}}</dd>{% if p.phone %}<dt>Phone</dt><dd><a href="tel:{{p.phone}}">{{p.phone}}</a></dd>{% endif %}{% if p.email %}<dt>Email</dt><dd>{{p.email}}</dd>{% endif %}</dl><div class="acts">{% if p.map_url %}<a class="btn" href="{{p.map_url}}" rel="noopener">Directions</a>{% endif %}{% if p.whatsapp %}<a class="btn ghost" href="https://wa.me/{{p.whatsapp}}" rel="noopener">WhatsApp</a>{% endif %}</div></div></article>{% endfor %}</div><p style="margin-top:20px">For weddings and events at Vijay Garden, use the chat or call us to share your date and guest count.</p></div></section>{% endblock %}
+{% block content %}
+{# ---- EDIT YOUR DETAILS HERE (leave '' to hide a line) ---- #}
+{% set phone = '' %}
+{% set whatsapp = '' %}
+{% set email = '' %}
+{% set props = [
+  {"name":"Vijay Utsav","tag":"Hall and Rooms",
+   "address":"Vijay Utsav Hall, South of Sikhar More, Post Baragandhar, Manpur, Gaya, Bihar, India",
+   "note":"Banquet hall, conference hall and comfortable rooms for guests."},
+  {"name":"Vijay Garden","tag":"Garden and Events",
+   "address":"Vijay Garden, South of Sikhar More, Manpur, Gaya, Bihar, India",
+   "note":"An open garden venue for weddings and family functions."}
+] %}
+
+<style>
+.ct{--ct-maroon:var(--maroon,#7f1a1d);--ct-dark:#4d0f12;--ct-gold:#b08d57;--ct-line:#eadfd3;--ct-muted:#6b625b;--ct-cream:#f8f4ee;--ct-ink:#221d1a;
+  background:var(--ct-cream);color:var(--ct-ink);padding-bottom:88px}
+.ct *{box-sizing:border-box}
+.ct-wrap{max-width:1120px;margin:0 auto;padding:0 20px}
+.ct h1,.ct h2,.ct h3{font-family:Georgia,"Times New Roman",serif}
+
+/* Hero */
+.ct-hero{background:linear-gradient(135deg,#7f1a1d,var(--ct-dark));color:#fff;text-align:center;padding:76px 20px 104px;position:relative}
+.ct-hero::after{content:"";position:absolute;left:0;right:0;bottom:0;height:4px;background:linear-gradient(90deg,transparent,var(--ct-gold),transparent)}
+.ct-hero small{display:block;letter-spacing:.3em;text-transform:uppercase;font-size:.75rem;color:#e6cfa3;margin-bottom:14px}
+.ct-hero h1{margin:0 0 14px;color:#fff;font-weight:700;font-size:clamp(2.1rem,5vw,3.4rem);line-height:1.1}
+.ct-orn{display:flex;align-items:center;justify-content:center;gap:14px;color:var(--ct-gold);margin:0 auto 16px;max-width:260px}
+.ct-orn::before,.ct-orn::after{content:"";flex:1;height:1px;background:currentColor;opacity:.7}
+.ct-hero p{margin:0 auto;max-width:56ch;color:rgba(255,255,255,.85);line-height:1.65}
+
+/* Quick contact strip */
+.ct-quick{position:relative;z-index:2;margin-top:-40px;background:#fff;border:1px solid var(--ct-line);border-radius:6px;
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));box-shadow:0 18px 40px rgba(43,39,38,.10)}
+.ct-quick>div{padding:22px 24px;border-right:1px solid var(--ct-line)}
+.ct-quick>div:last-child{border-right:0}
+.ct-quick b{display:block;font-size:.72rem;letter-spacing:.18em;text-transform:uppercase;color:var(--ct-gold);margin-bottom:6px}
+.ct-quick span,.ct-quick a{font-family:Georgia,serif;font-size:1.1rem;color:var(--ct-ink);text-decoration:none}
+.ct-quick a:hover{color:var(--ct-maroon)}
+
+/* Section heading */
+.ct-sec{text-align:center;margin:60px 0 34px}
+.ct-sec h2{margin:0 0 8px;font-size:clamp(1.7rem,3.5vw,2.4rem)}
+.ct-sec p{margin:0;color:var(--ct-muted)}
+.ct-sec .ct-orn{margin-top:14px;color:var(--ct-maroon)}
+
+/* Cards */
+.ct-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:28px}
+.ct-card{background:#fff;border:1px solid var(--ct-line);border-top:4px solid var(--ct-maroon);border-radius:6px;padding:34px 32px 30px;
+  position:relative;box-shadow:inset 0 0 0 6px #fff,inset 0 0 0 7px #eadcc2,0 10px 30px rgba(43,39,38,.06);transition:transform .3s,box-shadow .3s}
+.ct-card:hover{transform:translateY(-4px);box-shadow:inset 0 0 0 6px #fff,inset 0 0 0 7px var(--ct-gold),0 22px 44px rgba(127,26,29,.12)}
+.ct-tag{display:inline-block;font-size:.72rem;letter-spacing:.18em;text-transform:uppercase;color:var(--ct-gold);font-weight:700;margin-bottom:8px}
+.ct-card h3{margin:0 0 6px;font-size:1.8rem;color:var(--ct-maroon)}
+.ct-card .ct-note{margin:0 0 20px;color:var(--ct-muted);font-style:italic;line-height:1.55}
+.ct-row{display:flex;gap:14px;padding:16px 0;border-top:1px solid var(--ct-line)}
+.ct-ico{flex:none;width:38px;height:38px;border-radius:50%;border:1px solid var(--ct-gold);display:grid;place-items:center;color:var(--ct-maroon)}
+.ct-ico svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.ct-row b{display:block;font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:var(--ct-muted);margin-bottom:3px}
+.ct-row p{margin:0;line-height:1.6}
+.ct-btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
+.ct-btn{display:inline-block;text-decoration:none;font-weight:700;font-size:.9rem;letter-spacing:.04em;padding:12px 22px;border-radius:3px;border:1.5px solid var(--ct-maroon);transition:all .2s}
+.ct-btn.solid{background:var(--ct-maroon);color:#fff}
+.ct-btn.solid:hover{background:var(--ct-dark);border-color:var(--ct-dark)}
+.ct-btn.ghost{color:var(--ct-maroon);background:transparent}
+.ct-btn.ghost:hover{background:var(--ct-maroon);color:#fff}
+.ct-btn:focus-visible{outline:3px solid var(--ct-gold);outline-offset:3px}
+
+/* Info band */
+.ct-info{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:22px;margin-top:48px}
+.ct-info div{background:#fff;border:1px solid var(--ct-line);border-radius:6px;padding:26px;text-align:center}
+.ct-info h4{margin:0 0 8px;font:700 1.15rem Georgia,serif;color:var(--ct-maroon)}
+.ct-info p{margin:0;color:var(--ct-muted);line-height:1.6}
+
+/* Events banner */
+.ct-event{margin-top:48px;background:linear-gradient(135deg,#7f1a1d,var(--ct-dark));color:#fff;border-radius:6px;padding:38px 40px;
+  display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap;border:1px solid var(--ct-gold);outline:1px solid rgba(176,141,87,.5);outline-offset:-8px}
+.ct-event h3{margin:0 0 6px;font-size:1.6rem;color:#fff}
+.ct-event p{margin:0;color:rgba(255,255,255,.85);max-width:56ch;line-height:1.6}
+.ct-event .ct-btn{background:var(--ct-gold);border-color:var(--ct-gold);color:#2a1a10}
+.ct-event .ct-btn:hover{background:#fff;border-color:#fff}
+
+@media (max-width:640px){
+  .ct-hero{padding:56px 16px 90px}
+  .ct-wrap{padding:0 16px}
+  .ct-quick>div{border-right:0;border-bottom:1px solid var(--ct-line)}
+  .ct-quick>div:last-child{border-bottom:0}
+  .ct-card{padding:28px 22px}
+  .ct-event{padding:30px 24px}
+}
+@media (prefers-reduced-motion:reduce){.ct-card,.ct-btn{transition:none}}
+</style>
+
+<section class="ct">
+
+  <div class="ct-hero">
+    <small>Vijay Hospitality &middot; Manpur, Gaya</small>
+    <h1>Contact and directions</h1>
+    <div class="ct-orn">&#10070;</div>
+    <p>We would be delighted to welcome you. Find our locations below, or reach out to plan your stay, wedding or event.</p>
+  </div>
+
+  <div class="ct-wrap">
+
+    <div class="ct-quick">
+      <div><b>Check-in / Check-out</b><span>12:00 PM</span></div>
+      <div><b>Reception</b><span>Open 24 hours</span></div>
+      <div><b>Phone</b>{% if phone %}<a href="tel:{{ phone }}">{{ phone }}</a>{% else %}<span>Use the chat below</span>{% endif %}</div>
+      {% if email %}<div><b>Email</b><a href="mailto:{{ email }}">{{ email }}</a></div>{% endif %}
+    </div>
+
+    <div class="ct-sec">
+      <h2>Our Locations</h2>
+      <p>Two venues, one warm welcome.</p>
+      <div class="ct-orn">&#10070;</div>
+    </div>
+
+    <div class="ct-grid">
+      {% for p in props %}
+      <article class="ct-card">
+        <span class="ct-tag">{{ p.tag }}</span>
+        <h3>{{ p.name }}</h3>
+        <p class="ct-note">{{ p.note }}</p>
+
+        <div class="ct-row">
+          <span class="ct-ico"><svg viewBox="0 0 24 24"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></span>
+          <div><b>Address</b><p>{{ p.address }}</p></div>
+        </div>
+
+        {% if phone %}
+        <div class="ct-row">
+          <span class="ct-ico"><svg viewBox="0 0 24 24"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></svg></span>
+          <div><b>Phone</b><p><a href="tel:{{ phone }}" style="color:inherit">{{ phone }}</a></p></div>
+        </div>
+        {% endif %}
+
+        <div class="ct-btns">
+          <a class="ct-btn solid" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query={{ p.address|urlencode }}">Get directions</a>
+          {% if whatsapp %}<a class="ct-btn ghost" target="_blank" rel="noopener" href="https://wa.me/{{ whatsapp }}">WhatsApp</a>{% endif %}
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+
+    <div class="ct-info">
+      <div><h4>Stay with us</h4><p>Clean AC and Non-AC rooms with private bathroom, housekeeping and 24-hour security.</p></div>
+      <div><h4>Easy to reach</h4><p>South of Sikhar More, Manpur, Gaya. Use the directions button for the fastest route.</p></div>
+      <div><h4>Accessible</h4><p>Accessible parking, entrance and exit, with luggage assistance at reception.</p></div>
+    </div>
+
+    <div class="ct-event">
+      <div>
+        <h3>Weddings and events at Vijay Garden</h3>
+        <p>Use the chat or call us to share your date and guest count. Our team will guide you through every detail.</p>
+      </div>
+      <a class="ct-btn" href="/book">Book a room</a>
+    </div>
+
+  </div>
+</section>
+{% endblock %}
