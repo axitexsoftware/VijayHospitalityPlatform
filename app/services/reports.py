@@ -19,20 +19,50 @@ def _n(group):return {'day':10,'month':7,'year':4}[group]
 def series(db,start,end,group='day'):
     n=_n(group);out={}
     def put(k,f,v):out.setdefault(k,dict(label=k,bookings=0,booked=0,collected=0,cancels=0,checkins=0,checkouts=0))[f]+=v
+    first=dtm.date.fromisoformat(start);last=dtm.date.fromisoformat(end)
+    if group=='day':
+        current=first
+        while current<=last:
+            put(current.isoformat(),'bookings',0);current+=dtm.timedelta(days=1)
+    elif group=='month':
+        current=first.replace(day=1);last=last.replace(day=1)
+        while current<=last:
+            put(current.strftime('%Y-%m'),'bookings',0)
+            current=dtm.date(current.year+(current.month==12),current.month%12+1,1)
+    else:
+        for year in range(first.year,last.year+1):put(str(year),'bookings',0)
     for r in db.execute(f"SELECT substr(created_at,1,{n}) k,COUNT(*) c,SUM(CASE WHEN status IN{LIVE} THEN total_paise ELSE 0 END) v FROM reservations WHERE substr(created_at,1,10) BETWEEN ? AND ? GROUP BY k",(start,end)):put(r['k'],'bookings',r['c']);put(r['k'],'booked',r['v'] or 0)
     for r in db.execute(f"SELECT substr(paid_at,1,{n}) k,SUM(amount_paise-refunded_paise) v FROM payments WHERE status IN('paid','partially_refunded','refunded') AND substr(paid_at,1,10) BETWEEN ? AND ? GROUP BY k",(start,end)):put(r['k'],'collected',r['v'] or 0)
     for r in db.execute(f"SELECT substr(at,1,{n}) k,COUNT(*) c FROM cancellations WHERE substr(at,1,10) BETWEEN ? AND ? GROUP BY k",(start,end)):put(r['k'],'cancels',r['c'])
     for r in db.execute(f"SELECT substr(check_in,1,{n}) k,COUNT(*) c FROM reservations WHERE status IN{LIVE} AND check_in BETWEEN ? AND ? GROUP BY k",(start,end)):put(r['k'],'checkins',r['c'])
     for r in db.execute(f"SELECT substr(check_out,1,{n}) k,COUNT(*) c FROM reservations WHERE status IN{LIVE} AND check_out BETWEEN ? AND ? GROUP BY k",(start,end)):put(r['k'],'checkouts',r['c'])
     return [out[k] for k in sorted(out)]
+def occupancy_series(db,start,end):
+    rooms=one(db,"SELECT COUNT(*) FROM rooms WHERE status='active'")
+    counts={r['night']:r['occupied'] for r in db.execute(f"SELECT n.night,COUNT(DISTINCT n.room_id) occupied FROM room_nights n JOIN reservations s ON s.id=n.reservation_id AND s.status IN{LIVE} JOIN rooms r ON r.id=n.room_id AND r.status='active' WHERE n.night BETWEEN ? AND ? GROUP BY n.night",(start,end))}
+    current=dtm.date.fromisoformat(start);last=dtm.date.fromisoformat(end);out=[]
+    while current<=last:
+        night=current.isoformat();occupied=counts.get(night,0)
+        out.append(dict(label=night,occupancy=round(occupied/rooms*100,1) if rooms else 0,occupied=occupied,rooms=rooms))
+        current+=dtm.timedelta(days=1)
+    return out
+def financial_period(db,start,end,collected=None):
+    if collected is None:
+        collected=one(db,"SELECT COALESCE(SUM(amount_paise-refunded_paise),0) FROM payments WHERE status IN('paid','partially_refunded','refunded') AND substr(paid_at,1,10) BETWEEN ? AND ?",(start,end))
+    operating=one(db,"SELECT COALESCE(SUM(amount_paise),0) FROM expense_entries WHERE kind='operating' AND incurred_on BETWEEN ? AND ?",(start,end))
+    investment=one(db,"SELECT COALESCE(SUM(amount_paise),0) FROM expense_entries WHERE kind='capital' AND incurred_on<=?",(end,))
+    net=collected-operating
+    return dict(collected=collected,operating=operating,investment=investment,net_return=net,roi_pct=round(net/investment*100,1) if investment else None)
+def expense_rows(db,start,end,limit=200):
+    return [dict(r) for r in db.execute("SELECT e.*,u.name created_by_name FROM expense_entries e LEFT JOIN users u ON u.id=e.created_by WHERE (e.kind='operating' AND e.incurred_on BETWEEN ? AND ?) OR (e.kind='capital' AND e.incurred_on<=?) ORDER BY e.incurred_on DESC,e.id DESC LIMIT ?",(start,end,end,limit))]
 def summary(db,start,end):
     a=d(start);b=d(end);days=(b-a).days+1;rooms=one(db,"SELECT COUNT(*) FROM rooms WHERE status='active'")
     sold=one(db,f"SELECT COUNT(*) FROM room_nights n JOIN reservations s ON s.id=n.reservation_id WHERE s.status IN{LIVE} AND n.night BETWEEN ? AND ?",(start,end))
     booked=one(db,f"SELECT COALESCE(SUM(total_paise),0) FROM reservations WHERE status IN{LIVE} AND check_in BETWEEN ? AND ?",(start,end));nb=one(db,f"SELECT COUNT(*) FROM reservations WHERE status IN{LIVE} AND check_in BETWEEN ? AND ?",(start,end))
     allb=one(db,"SELECT COUNT(*) FROM reservations WHERE check_in BETWEEN ? AND ? AND status!='expired'",(start,end));canc=one(db,"SELECT COUNT(*) FROM reservations WHERE status='cancelled' AND check_in BETWEEN ? AND ?",(start,end))
-    coll=one(db,"SELECT COALESCE(SUM(amount_paise-refunded_paise),0) FROM payments WHERE status IN('paid','partially_refunded','refunded') AND substr(paid_at,1,10) BETWEEN ? AND ?",(start,end))
+    coll=one(db,"SELECT COALESCE(SUM(amount_paise-refunded_paise),0) FROM payments WHERE status IN('paid','partially_refunded','refunded') AND substr(paid_at,1,10) BETWEEN ? AND ?",(start,end));finance=financial_period(db,start,end,coll)
     cats=[dict(r) for r in db.execute(f"SELECT c.name,c.ac,COUNT(DISTINCT s.id) bookings,COUNT(n.night) nights,COALESCE(SUM(s.total_paise*1.0/s.nights),0) booked FROM room_nights n JOIN reservations s ON s.id=n.reservation_id JOIN rooms r ON r.id=n.room_id JOIN room_categories c ON c.id=r.category_id WHERE s.status IN{LIVE} AND n.night BETWEEN ? AND ? GROUP BY c.id ORDER BY nights DESC",(start,end))]
-    return dict(days=days,rooms=rooms,nights_sold=sold,occupancy=round(sold/(rooms*days)*100,1) if rooms else 0,booked=booked,bookings=nb,avg_value=round(booked/nb) if nb else 0,adr=round(booked/sold) if sold else 0,collected=coll,cancelled=canc,cancel_rate=round(canc/allb*100,1) if allb else 0,categories=cats,
+    return dict(days=days,rooms=rooms,nights_sold=sold,occupancy=round(sold/(rooms*days)*100,1) if rooms else 0,booked=booked,bookings=nb,avg_value=round(booked/nb) if nb else 0,adr=round(booked/sold) if sold else 0,collected=coll,operating=finance['operating'],investment=finance['investment'],net_return=finance['net_return'],roi_pct=finance['roi_pct'],cancelled=canc,cancel_rate=round(canc/allb*100,1) if allb else 0,categories=cats,
      ac=sum(c['nights'] for c in cats if c['ac']),nonac=sum(c['nights'] for c in cats if not c['ac']))
 def booking_rows(db,q='',status='',cat='',created_from='',created_to='',ci_from='',ci_to='',limit=500):
     sql='''SELECT s.*,c.name cname,c.phone cphone,r.number rnumber,k.name cat_name,p.name pname,(SELECT COALESCE(SUM(amount_paise-refunded_paise),0) FROM payments x WHERE x.reservation_id=s.id AND x.status IN('paid','partially_refunded','refunded')) paid_paise
@@ -78,5 +108,5 @@ def svg_bars(data,key,color='#8F1D1E',money=False,h=150):
     mx=max([x[key] for x in data]+[1]);w=max(320,len(data)*38);bw=w/len(data);o=[f'<svg viewBox="0 0 {w} {h+34}" role="img" aria-label="{key} chart" style="width:100%;height:auto">']
     for i,x in enumerate(data):
         v=x[key];bh=v/mx*h;val=f"{v/100:,.0f}" if money else str(v)
-        o.append(f'<rect x="{i*bw+6}" y="{h-bh+10}" width="{bw-12}" height="{bh}" rx="4" fill="{color}"><title>{x["label"]}: {val}</title></rect><text x="{i*bw+bw/2}" y="{h+26}" font-size="9" text-anchor="middle" fill="currentColor">{x["label"][-5:] if len(x["label"])>7 else x["label"]}</text>')
+        o.append(f'<rect x="{i*bw+6}" y="{h-bh+10}" width="{bw-12}" height="{bh}" rx="4" fill="{color}"><title>{x["label"]}: {val}</title></rect><text x="{i*bw+bw/2}" y="{h-bh+7}" font-size="8" text-anchor="middle" fill="currentColor">{val}</text><text x="{i*bw+bw/2}" y="{h+26}" font-size="9" text-anchor="middle" fill="currentColor">{x["label"][-5:] if len(x["label"])>7 else x["label"]}</text>')
     o.append('</svg>');return Markup(''.join(o))

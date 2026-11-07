@@ -180,6 +180,7 @@ def room_status_board(db,on=None):
     on=on or today().isoformat();out=[]
     for r in db.execute("SELECT r.id,r.number,r.status,c.name cat,c.ac,p.name pname FROM rooms r JOIN room_categories c ON c.id=r.category_id JOIN properties p ON p.id=r.property_id ORDER BY p.id,r.number"):
         r=dict(r);n=db.execute('SELECT n.reservation_id,n.reason,s.status,s.ref FROM room_nights n LEFT JOIN reservations s ON s.id=n.reservation_id WHERE n.room_id=? AND n.night=?',(r['id'],on)).fetchone()
+        r['reservation_id']=n['reservation_id'] if n else None
         r['state']='inactive' if r['status']=='inactive' else 'available' if not n else 'blocked' if n['reservation_id'] is None else 'occupied' if n['status']=='checked_in' else 'reserved'
         r['detail']=(n['reason'] or n['ref']) if n else '';out.append(r)
     return out

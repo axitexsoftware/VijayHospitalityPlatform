@@ -1,5 +1,5 @@
 {% macro calendar() %}<details class="rate-calendar" data-price-calendar><summary>Explore nightly prices</summary><div class="rate-calendar-body"><div class="rate-calendar-head"><button type="button" class="btn sm plain" data-calendar-prev aria-label="Previous month">‹</button><strong data-calendar-month></strong><button type="button" class="btn sm plain" data-calendar-next aria-label="Next month">›</button></div><div class="rate-calendar-grid" data-calendar-grid role="grid"></div><p class="muted" data-calendar-message aria-live="polite">Choose a room type to view nightly prices. Peak dates are marked with a dot.</p></div></details>{% endmacro %}
-{% macro bar(f,cats,today,action='/search') %}<form class="sbar" method="get" action="{{action}}">
+{% macro bar(f,cats,today,action='/search') %}<form class="sbar" id="room-search" method="get" action="{{action}}">
 <label>Check-in<input type="date" name="ci" id="ci" min="{{today}}" value="{{f.ci}}" required></label><label>Check-out<input type="date" name="co" data-after="ci" min="{{today}}" value="{{f.co}}" required></label>
 {{calendar()}}
 <label>Adults<input type="number" name="adults" min="1" max="12" value="{{f.adults or 2}}" style="width:80px"></label><label>Children<input type="number" name="children" min="0" max="12" value="{{f.children or 0}}" style="width:80px"></label>

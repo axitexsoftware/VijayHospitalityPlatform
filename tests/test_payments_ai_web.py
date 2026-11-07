@@ -65,6 +65,39 @@ class Web(Base):
     def test_account_lockout(self):
         for _ in range(5):self.login(pw='nope')
         c,r=self.login();self.assertEqual(r.status_code,200)
+    def test_public_page_templates_and_booking_entry_render(self):
+        c=self.app.test_client();paths=('/','/properties','/rooms','/rooms/1','/events','/offers','/gallery','/facilities','/contact','/about','/faq','/privacy','/search','/booking/lookup')
+        for path in paths:self.assertEqual(c.get(path).status_code,200,path)
+        self.assertIn('selected',c.get('/contact',query_string={'kind':'event'}).get_data(as_text=True))
+        sitemap=c.get('/sitemap.xml').get_data(as_text=True);self.assertIn('/events',sitemap);self.assertIn('/offers',sitemap)
+        facilities=c.get('/facilities').get_data(as_text=True);self.assertIn('facility-jump',facilities);self.assertIn('name="ci"',facilities);self.assertIn('Destination',facilities)
+        self.assertNotIn('guest-searchbar',c.get('/').get_data(as_text=True));self.assertNotIn('guest-searchbar',c.get('/search').get_data(as_text=True))
+        query=dict(room_id=1,ci=day(10),co=day(12),adults=2,children=0)
+        self.assertEqual(c.get('/search',query_string=query|{'room_id':''}).status_code,200)
+        self.assertEqual(c.get('/book',query_string=query).status_code,200)
+        stylesheet=c.get('/static/css/public.css');self.assertEqual(stylesheet.status_code,200);stylesheet.close()
+    def test_unpriced_room_categories_are_visible_but_not_bookable(self):
+        self.db.execute('UPDATE room_categories SET base_price_paise=0')
+        client=self.app.test_client();home=client.get('/').get_data(as_text=True);rooms=client.get('/rooms').get_data(as_text=True)
+        for page in (home,rooms):
+            self.assertIn('AC Room',page);self.assertIn('Non-AC Room',page);self.assertIn('Rates on request',page)
+            self.assertNotIn('/book?room_id=',page)
+        self.assertIn('Contact for rates',home);self.assertIn('Ask about availability',rooms)
+        error=client.get('/rooms/999');self.assertEqual(error.status_code,404);self.assertIn(b'We couldn\'t find that page.',error.data);self.assertIn(b'Find a room',error.data)
+    def test_guest_event_enquiry_is_saved_and_managed_by_admin(self):
+        client=self.app.test_client();token=self.csrf(client,'/contact');payload={'csrf_token':token,'kind':'event','property_id':'1','preferred_date':day(10),'guest_count':'80','name':'Asha Event Host','phone':'9811111199','email':'asha@example.in','message':'Please contact me about an event at Vijay Garden.'}
+        response=client.post('/contact',data=payload);self.assertEqual(response.status_code,302);self.assertIn('#enquiry',response.headers['Location'])
+        row=self.db.execute('SELECT * FROM guest_enquiries').fetchone();self.assertEqual(row['kind'],'event');self.assertEqual(row['status'],'new');self.assertEqual(row['guest_count'],80)
+        staff,_=self.login();inbox=staff.get('/admin/enquiries');self.assertEqual(inbox.status_code,200);self.assertIn('Asha Event Host',inbox.get_data(as_text=True));self.assertIn('Vijay Utsav',inbox.get_data(as_text=True))
+        admin_token=self.csrf(staff,'/admin/enquiries');updated=staff.post(f'/admin/enquiries/{row["id"]}/status',data={'csrf_token':admin_token,'status':'contacted'});self.assertEqual(updated.status_code,302)
+        self.assertEqual(self.db.execute('SELECT status FROM guest_enquiries WHERE id=?',(row['id'],)).fetchone()[0],'contacted')
+        self.assertTrue(self.db.execute("SELECT 1 FROM audit_logs WHERE entity='guest_enquiry' AND entity_id=? AND action='guest_enquiry_status_changed'",(str(row['id']),)).fetchone())
+        invalid=self.app.test_client();bad_token=self.csrf(invalid,'/contact');payload.update(csrf_token=bad_token,phone='123');self.assertEqual(invalid.post('/contact',data=payload).status_code,200);self.assertEqual(self.db.execute('SELECT COUNT(*) FROM guest_enquiries').fetchone()[0],1)
+        receptionist,_=self.login('rec@t.in');self.assertEqual(receptionist.get('/admin/enquiries').status_code,403)
+    def test_contact_page_views_do_not_consume_submission_limit(self):
+        app=create_app(DATABASE=self.path,RATELIMIT_ENABLED=True,SECRET_KEY='test-contact-rate-limit-key')
+        client=app.test_client()
+        for _ in range(12):self.assertEqual(client.get('/contact').status_code,200)
     def test_public_booking_flow_and_manage(self):
         c=self.app.test_client();t=self.csrf(c,'/');q=dict(room_id=1,ci=day(10),co=day(12),adults=2,children=0)
         self.assertIn('Select',c.get('/search',query_string=dict(ci=q['ci'],co=q['co'],adults=2)).get_data(as_text=True))
@@ -87,6 +120,38 @@ class Web(Base):
         s=R.summary(self.db,day(0),day(1));self.assertEqual(s['nights_sold'],2);self.assertEqual(s['bookings'],1);self.assertEqual(s['ac'],2)
         c,_=self.login();self.assertEqual(c.get('/admin/reports').status_code,200)
         x=c.get('/admin/bookings/export.xlsx');self.assertTrue(x.data.startswith(b'PK'));self.assertTrue(c.get('/admin/reports/export.pdf').data.startswith(b'%PDF'))
+    def test_dashboard_shows_complete_analytics_values(self):
+        from app.services import reports as R
+        user={'id':1,'email':'owner@t.in'}
+        bookings=[self.book(1,ci=0,co=1,name='Analytics Guest One',phone='9811111101'),self.book(2,ci=4,co=5,name='Analytics Guest Two',phone='9811111102'),self.book(3,ci=8,co=9,name='Analytics Guest Three',phone='9811111103')]
+        for reservation,offset,amount in zip(bookings,(-12,-7,-2),(50000,70000,80000)):
+            stamp=f'{day(offset)} 12:00:00'
+            self.db.execute('UPDATE reservations SET created_at=? WHERE id=?',(stamp,reservation['id']))
+            P.record_manual(self.db,reservation['id'],'cash',amount,'analytics-test',user)
+            self.db.execute('UPDATE payments SET paid_at=? WHERE reservation_id=?',(stamp,reservation['id']))
+        rows=R.series(self.db,day(-13),day(0),'day');occupancy=R.occupancy_series(self.db,day(-13),day(0))
+        self.assertEqual(len(rows),14);self.assertEqual(sum(row['bookings'] for row in rows),3);self.assertEqual(sum(row['collected'] for row in rows),200000)
+        self.assertEqual(len(occupancy),14);self.assertEqual(occupancy[-1]['occupancy'],33.3)
+        client,_=self.login();response=client.get('/admin/');self.assertEqual(response.status_code,200);page=response.get_data(as_text=True)
+        for text in ('Bookings created','Payments collected','Occupancy by night','Room-category demand','Show all bookings values','Show all collected values','33.3%'):
+            self.assertIn(text,page)
+    def test_owner_pages_and_finance_ledger_workflows(self):
+        from app.services import reports as R
+        reservation=self.book(1,ci=0,co=1);P.record_manual(self.db,reservation['id'],'cash',100000,'test-cash',{'id':1,'email':'owner@t.in'})
+        client,_=self.login();paths=('/admin/reception','/admin/bookings','/admin/rooms','/admin/categories','/admin/pricing/dynamic','/admin/media','/admin/reports','/admin/enquiries','/admin/conversations','/admin/users')
+        for path in paths:self.assertEqual(client.get(path).status_code,200,path)
+        token=self.csrf(client,'/admin/reports');entry=dict(csrf_token=token,**{'from':day(0),'to':day(0),'group':'day','incurred_on':day(0)})
+        self.assertEqual(client.post('/admin/expenses',data=entry|{'kind':'capital','category':'Renovation','description':'Test capital investment','amount':'1000','incurred_on':day(-100)}).status_code,302)
+        self.assertEqual(client.post('/admin/expenses',data=entry|{'kind':'operating','category':'Utilities','description':'Test operating cost','amount':'250'}).status_code,302)
+        finance=R.summary(self.db,day(0),day(0));self.assertEqual(finance['collected'],100000);self.assertEqual(finance['operating'],25000);self.assertEqual(finance['investment'],100000);self.assertEqual(finance['net_return'],75000);self.assertEqual(finance['roi_pct'],75.0)
+        page=client.get('/admin/reports',query_string={'from':day(0),'to':day(0)}).get_data(as_text=True);self.assertIn('75.0%',page);self.assertIn('Test operating cost',page);self.assertIn('Test capital investment',page)
+        eid=self.db.execute("SELECT id FROM expense_entries WHERE category='Utilities'").fetchone()[0]
+        self.assertEqual(client.post(f'/admin/expenses/{eid}/delete',data={'csrf_token':token}).status_code,302)
+        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM expense_entries WHERE id=?',(eid,)).fetchone()[0],0)
+    def test_receptionist_cannot_write_financial_entries(self):
+        client,_=self.login('rec@t.in');token=self.csrf(client,'/admin/reception')
+        response=client.post('/admin/expenses',data={'csrf_token':token,'kind':'capital','category':'Test','description':'Blocked','amount':'10','incurred_on':day(0)})
+        self.assertEqual(response.status_code,403)
     def test_security_headers_xss_and_sql_injection(self):
         c=self.app.test_client();r=c.get('/');self.assertIn("default-src 'self'",r.headers['Content-Security-Policy']);self.assertEqual(r.headers['X-Frame-Options'],'DENY')
         self.book(1,name='<script>alert(1)</script>',phone='9855555555');oc,_=self.login();page=oc.get('/admin/bookings').get_data(as_text=True);self.assertNotIn('<script>alert(1)</script>',page);self.assertIn('&lt;script&gt;',page)

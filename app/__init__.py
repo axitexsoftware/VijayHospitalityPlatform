@@ -2,7 +2,7 @@ import os,logging
 from logging.handlers import RotatingFileHandler
 from flask import Flask,Request,render_template,request,g,session,current_app
 from . import config as cfgmod,db as dbm,security
-from .util import inr,d
+from .util import inr,d,today
 class HospitalityRequest(Request):
     @property
     def max_content_length(self):
@@ -26,7 +26,7 @@ def create_app(**over):
     @app.context_processor
     def inject():
         from .payments_ui import razorpay_ready
-        return dict(user=getattr(g,'user',None),razorpay_ready=razorpay_ready())
+        return dict(user=getattr(g,'user',None),razorpay_ready=razorpay_ready(),today=today().isoformat(),tomorrow=(today()+__import__('datetime').timedelta(days=1)).isoformat())
     @app.errorhandler(404)
     def e404(e):return render_template('public/error.html',code=404,msg='Page not found'),404
     @app.errorhandler(403)

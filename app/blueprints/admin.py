@@ -30,8 +30,14 @@ def logout():session.clear();return redirect(url_for('admin.login'))
 def dashboard():
     db=get_db();B.expire_holds(db);t=today().isoformat()
     ar=R.booking_rows(db,status='confirmed',ci_from=t,ci_to=t);dp=R.booking_rows(db,status='checked_in',limit=200);dp=[r for r in dp if r['check_out']==t]
-    ser=R.series(db,(today()-dtm.timedelta(days=13)).isoformat(),t,'day')
-    return render_template('admin/dashboard.html',k=R.dashboard(db),arr=ar,dep=dp,ser=ser,svg=R.svg_bars,upcoming=R.booking_rows(db,status='confirmed',ci_from=(today()+dtm.timedelta(days=1)).isoformat(),limit=8))
+    start=(today()-dtm.timedelta(days=13)).isoformat();ser=R.series(db,start,t,'day');occ=R.occupancy_series(db,start,t)
+    k=R.dashboard(db);k['new_enquiries']=db.execute("SELECT COUNT(*) FROM guest_enquiries WHERE status='new'").fetchone()[0];demand_max=max((x['nights'] for x in k['demand']),default=0)
+    try:map_date=dtm.date.fromisoformat(request.args.get('date',''))
+    except ValueError:map_date=today()
+    if map_date<today():map_date=today()
+    map_on=map_date.isoformat();month_on=map_date.replace(day=1).isoformat();year_on=map_date.replace(month=1,day=1).isoformat()
+    finance={'day':R.financial_period(db,map_on,map_on),'month':R.financial_period(db,month_on,map_on),'year':R.financial_period(db,year_on,map_on)}
+    return render_template('admin/dashboard.html',k=k,arr=ar,dep=dp,ser=ser,occ=occ,demand_max=demand_max,svg=R.svg_bars,finance=finance,map_date=map_on,today=t,room_map=B.room_status_board(db,map_on),upcoming=R.booking_rows(db,status='confirmed',ci_from=(today()+dtm.timedelta(days=1)).isoformat(),limit=8))
 # ---- rooms & categories
 @bp.get('/rooms')
 @require('rooms')
@@ -379,7 +385,7 @@ def reports():
     db=get_db();a=request.args;end=a.get('to') or today().isoformat();start=a.get('from') or (today()-dtm.timedelta(days=29)).isoformat();grp=a.get('group','day') if a.get('group') in('day','month','year') else 'day'
     try:d(start);d(end)
     except Exception:flash('Choose valid dates.','error');start=(today()-dtm.timedelta(days=29)).isoformat();end=today().isoformat()
-    return render_template('admin/reports.html',s=R.summary(db,start,end),ser=R.series(db,start,end,grp),start=start,end=end,grp=grp,svg=R.svg_bars)
+    return render_template('admin/reports.html',s=R.summary(db,start,end),ser=R.series(db,start,end,grp),expenses=R.expense_rows(db,start,end),start=start,end=end,grp=grp,today=today().isoformat(),svg=R.svg_bars)
 @bp.get('/reports/export.<fmt>')
 @require('reports')
 def reports_export(fmt):
@@ -387,6 +393,25 @@ def reports_export(fmt):
     if fmt=='xlsx':return Response(R.xlsx(rows,R.summary(db,start,end)),mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',headers={'Content-Disposition':'attachment; filename=report.xlsx'})
     if fmt=='pdf':return Response(R.pdf(rows,f'Vijay Hospitality report {start} to {end}'),mimetype='application/pdf',headers={'Content-Disposition':'attachment; filename=report.pdf'})
     abort(404)
+@bp.post('/expenses')
+@require('reports')
+def expense_add():
+    f=request.form;db=get_db()
+    try:
+        kind=f.get('kind','');category=' '.join(f.get('category','').split())[:40];description=' '.join(f.get('description','').split())[:200];amount=_money(f.get('amount'));incurred=d(f.get('incurred_on','')).isoformat()
+        if kind not in('operating','capital') or not category or not description or not amount:raise ValueError
+        if incurred>today().isoformat():raise ValueError
+        eid=db.execute('INSERT INTO expense_entries(kind,category,description,amount_paise,incurred_on,created_by) VALUES(?,?,?,?,?,?)',(kind,category,description,amount,incurred,g.user['id'])).lastrowid
+        B.audit(db,g.user,'expense_added','expense',eid,f'{kind}: {amount} paise, {incurred}');flash('Financial entry recorded.','ok')
+    except (ValueError,TypeError,KeyError):flash('Enter a valid type, category, description, amount and date (today or earlier).','error')
+    return redirect(url_for('admin.reports',**{'from':request.form.get('from',''),'to':request.form.get('to',''),'group':request.form.get('group','day')}))
+@bp.post('/expenses/<int:eid>/delete')
+@require('reports')
+def expense_delete(eid):
+    db=get_db();row=db.execute('SELECT kind,category,amount_paise FROM expense_entries WHERE id=?',(eid,)).fetchone()
+    if row:
+        db.execute('DELETE FROM expense_entries WHERE id=?',(eid,));B.audit(db,g.user,'expense_deleted','expense',eid,f'{row["kind"]}: {row["category"]}, {row["amount_paise"]} paise');flash('Financial entry removed.','ok')
+    return back('admin.reports')
 # ---- users, settings, audit, conversations
 @bp.route('/users',methods=['GET','POST'])
 @require('users')
@@ -432,6 +457,24 @@ def settings():
 @bp.get('/audit')
 @require('audit')
 def audit():return render_template('admin/audit.html',logs=get_db().execute('SELECT * FROM audit_logs ORDER BY id DESC LIMIT 300').fetchall())
+@bp.get('/enquiries')
+@require('enquiries')
+def enquiries():
+    db=get_db();status=request.args.get('status','')
+    if status not in('','new','contacted','closed'):status=''
+    sql='SELECT e.*,p.name pname FROM guest_enquiries e LEFT JOIN properties p ON p.id=e.property_id';args=()
+    if status:sql+=' WHERE e.status=?';args=(status,)
+    rows=db.execute(sql+' ORDER BY CASE e.status WHEN \'new\' THEN 0 WHEN \'contacted\' THEN 1 ELSE 2 END,e.created_at DESC LIMIT 300',args).fetchall()
+    return render_template('admin/enquiries.html',rows=rows,status=status,counts={s:db.execute('SELECT COUNT(*) FROM guest_enquiries WHERE status=?',(s,)).fetchone()[0] for s in('new','contacted','closed')})
+@bp.post('/enquiries/<int:eid>/status')
+@require('enquiries')
+def enquiry_status(eid):
+    status=request.form.get('status','')
+    if status not in('new','contacted','closed'):abort(400)
+    db=get_db();row=db.execute('SELECT status,kind,name FROM guest_enquiries WHERE id=?',(eid,)).fetchone()
+    if not row:abort(404)
+    db.execute('UPDATE guest_enquiries SET status=?,updated_at=? WHERE id=?',(status,now_s(),eid));B.audit(db,g.user,'guest_enquiry_status_changed','guest_enquiry',eid,f'{row["status"]} to {status}: {row["kind"]} from {row["name"]}');flash('Enquiry status updated.','ok')
+    return redirect(url_for('admin.enquiries',status=request.form.get('filter','')))
 @bp.get('/conversations')
 @require('conversations')
 def conversations():return render_template('admin/conversations.html',rows=get_db().execute("SELECT c.*,(SELECT COUNT(*) FROM ai_messages m WHERE m.conversation_id=c.id) n FROM ai_conversations c ORDER BY (c.status='handover') DESC,c.updated_at DESC LIMIT 100").fetchall())

@@ -1,13 +1,17 @@
 import datetime as dtm
 from flask import Blueprint,render_template,request,redirect,url_for,session,abort,flash,Response,current_app
 from ..db import get_db,setting
-from ..security import rate_limit
-from ..util import today
+from ..security import rate_limit,rate_ok
+from ..util import today,now_s,d
 from ..services import booking as B,payments as P,notify,dynamic_pricing as DP
 bp=Blueprint('public',__name__)
 GALLERY=[('home','Vijay Utsav Hall hotel building with the paved lawn in front'),('hotel-night','Vijay Utsav Hall hotel lit up at night'),('hotel-decor','Hotel entrance decorated for an event'),('room-ac','Air-conditioned guest room with double bed'),('room-b','Guest room with double bed and cove lighting'),('room-c','Spacious guest room'),('room-d','Guest room with wardrobe'),('room-102','Doorway of room 102'),
  ('garden-gate','Vijay Garden entrance arch'),('lawn-stage','Banquet lawn with decorated stage'),('event-stage','Event stage and open lawn'),('garden-stage','Landscaped garden with stage'),('floral','Floral entrance arch'),('walkway','Garden walkway with arches')]
-FAC=['Private entrance','Housekeeping','Accessible car parking','Accessible entrance and exit','Telephone service','Private bathroom','Reception','Luggage assistance and storage','Business centre','Conference hall','Banquet hall','Electronic safe','Security guard','24-hour security','Torch availability','Guest assistance']
+FACILITIES=[
+    dict(id='comfort',eyebrow='Stay essentials',title='Comfort and room care',description='Practical comforts to help you settle in and feel at ease.',items=['Private bathroom','Housekeeping','Electronic safe']),
+    dict(id='arrival',eyebrow='Arrival and access',title='A smoother arrival',description='Access and arrival assistance for guests and families.',items=['Private entrance','Accessible car parking','Accessible entrance and exit','Luggage assistance and storage']),
+    dict(id='support',eyebrow='Guest support',title='Help when you need it',description='Reception and guest assistance throughout your visit.',items=['Reception','Telephone service','Guest assistance','Security guard','24-hour security','Torch availability']),
+    dict(id='events',eyebrow='Work and celebrations',title='Meet, work and celebrate',description='Spaces and services for gatherings, business and special occasions.',items=['Business centre','Conference hall','Banquet hall'])]
 FAQ=[('What are the check-in and check-out times?','Check-in is from 12:00 PM and check-out is at 12:00 PM.'),('What room types do you have?','AC and Non-AC rooms, each with a private bathroom and housekeeping.'),('How do I book?','Search your dates, choose a room and enter your details. You can pay at the hotel or online when online payment is enabled.'),
  ('Can I cancel or change my booking?','Yes. Use Manage booking with your booking reference and mobile number. Free cancellation applies until the deadline shown on your booking page.'),('Do you host weddings and events?','Yes, at Vijay Garden. Send an enquiry through the contact page or the AI receptionist.'),('Is parking available?','Accessible car parking and an accessible entrance and exit are available.')]
 def props():return get_db().execute('SELECT * FROM properties WHERE active=1 ORDER BY id').fetchall()
@@ -16,6 +20,8 @@ def cats():
     for row in db.execute("SELECT c.*,p.name pname,(SELECT COUNT(*) FROM rooms r WHERE r.category_id=c.id AND r.status='active') rooms FROM room_categories c JOIN properties p ON p.id=c.property_id WHERE c.active=1 AND p.active=1 AND c.base_price_paise>0 ORDER BY p.id,c.ac DESC"):
         c=dict(row);c['display_price_paise']=DP.nightly(db,c['id'],today().isoformat())['price_paise'];out.append(c)
     return out
+def category_previews():
+    return [dict(r) for r in get_db().execute("SELECT c.id,c.name,c.ac,c.description,c.image,p.name pname FROM room_categories c JOIN properties p ON p.id=c.property_id WHERE c.active=1 AND p.active=1 ORDER BY p.id,c.ac DESC,c.name")]
 def category_media(db,category_id):
     return [dict(r) for r in db.execute("SELECT path,title,caption FROM site_media WHERE kind='room' AND category_id=? AND active=1 ORDER BY sort,id",(category_id,))]
 def media_items(db,kind,property_id=None,category_id=None):
@@ -30,16 +36,22 @@ def home():
     db=get_db();ps=props()
     categories=cats()
     return render_template('public/home.html',ld=hotel_ld(ps),props=ps,cats=categories,slides=media_items(db,'slide'),
-        category_media={c['id']:category_media(db,c['id']) for c in categories},today=today().isoformat(),tomorrow=(today()+dtm.timedelta(days=1)).isoformat())
+        category_media={c['id']:category_media(db,c['id']) for c in categories},room_previews=category_previews(),today=today().isoformat(),tomorrow=(today()+dtm.timedelta(days=1)).isoformat())
 @bp.get('/properties')
 def properties():return render_template('public/properties.html',props=props())
+@bp.get('/events')
+def events():return render_template('public/events.html',props=props())
+@bp.get('/offers')
+def offers():
+    db=get_db();rates=[dict(r) for r in db.execute("SELECT x.*,c.name cat,p.name pname FROM pricing_rules x JOIN room_categories c ON c.id=x.category_id JOIN properties p ON p.id=c.property_id WHERE c.active=1 AND p.active=1 AND x.end_date>=? ORDER BY x.start_date,p.id,c.name",(today().isoformat(),))]
+    return render_template('public/offers.html',rates=rates,today=today().isoformat())
 @bp.get('/rooms')
 def rooms():
     db=get_db();rs=[dict(r) for r in db.execute(B.ROOM_SQL+' ORDER BY p.id,c.ac DESC,r.number')]
     for r in rs:
         r['images']=[dict(i) for i in db.execute('SELECT path,alt FROM room_images WHERE room_id=? ORDER BY sort,id',(r['id'],))]
         r['cat_images']=category_media(db,r['category_id']);r['display_price_paise']=B.price_per_night(db,r,today().isoformat())
-    return render_template('public/rooms.html',cats=cats(),rooms=rs,today=today().isoformat())
+    return render_template('public/rooms.html',cats=cats(),rooms=rs,room_previews=category_previews(),today=today().isoformat())
 @bp.get('/rooms/<int:rid>')
 def room(rid):
     db=get_db();r=db.execute(B.ROOM_SQL+' AND r.id=?',(rid,)).fetchone()
@@ -115,11 +127,33 @@ def gallery():
     items=media_items(get_db(),'gallery')
     return render_template('public/gallery.html',items=items if items else GALLERY)
 @bp.get('/facilities')
-def facilities():return render_template('public/facilities.html',fac=FAC)
+def facilities():return render_template('public/facilities.html',facilities=FACILITIES)
 @bp.get('/about')
 def about():return render_template('public/about.html')
-@bp.get('/contact')
-def contact():return render_template('public/contact.html',props=props())
+@bp.route('/contact',methods=['GET','POST'])
+def contact():
+    db=get_db();active_props=props();vals={k:request.values.get(k,'') for k in('kind','property_id','name','phone','email','preferred_date','guest_count','message')};errors={}
+    if request.method=='POST':
+        if not rate_ok(f'contact:{request.remote_addr}',8,600):abort(429)
+        f=request.form;kind=f.get('kind','general');property_id=None
+        try:
+            if kind not in('room','event','general'):raise ValueError('Choose a valid enquiry type.')
+            if f.get('property_id'):
+                property_id=int(f['property_id'])
+                if not db.execute('SELECT 1 FROM properties WHERE id=? AND active=1',(property_id,)).fetchone():raise ValueError('Choose an active property.')
+            preferred=d(f['preferred_date']).isoformat() if f.get('preferred_date') else None
+            if preferred and preferred<today().isoformat():raise ValueError('Choose today or a future date.')
+            guest_count=int(f['guest_count']) if f.get('guest_count') else None
+            if guest_count is not None and not 1<=guest_count<=10000:raise ValueError('Enter a guest count between 1 and 10,000.')
+            message=' '.join(f.get('message','').split())
+            if not 10<=len(message)<=2000:raise ValueError('Message must be 10 to 2,000 characters.')
+            name,phone,email=B.validate_customer(f.get('name',''),f.get('phone',''),f.get('email',''))
+            db.execute('INSERT INTO guest_enquiries(property_id,kind,name,phone,email,preferred_date,guest_count,message,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)',(property_id,kind,name,phone,email,preferred,guest_count,message,now_s(),now_s()))
+            flash('Thank you. Your enquiry has been recorded for the property team.','ok');return redirect(url_for('public.contact',_anchor='enquiry'))
+        except B.BookingError as e:errors.update(e.errors or {'form':str(e)})
+        except (ValueError,TypeError) as e:errors['form']=str(e) or 'Check the enquiry details and try again.'
+        flash('Please check the highlighted enquiry details.','error')
+    return render_template('public/contact.html',props=active_props,vals=vals,errors=errors)
 @bp.get('/faq')
 def faq():return render_template('public/faq.html',faq=FAQ,ld={'@context':'https://schema.org','@type':'FAQPage','mainEntity':[{'@type':'Question','name':q,'acceptedAnswer':{'@type':'Answer','text':a}} for q,a in FAQ]})
 @bp.get('/privacy')
@@ -128,5 +162,5 @@ def privacy():return render_template('public/privacy.html')
 def robots():return Response(f"User-agent: *\nAllow: /\nDisallow: /admin/\nDisallow: /api/\nDisallow: /booking/\n\nSitemap: {current_app.config['SITE_URL']}/sitemap.xml\n",mimetype='text/plain')
 @bp.get('/sitemap.xml')
 def sitemap():
-    u=current_app.config['SITE_URL'];paths=['/','/properties','/rooms','/gallery','/facilities','/about','/contact','/faq','/privacy','/search','/booking/lookup']+[f'/rooms/{r[0]}' for r in get_db().execute(B.ROOM_SQL.replace('SELECT r.id','SELECT r.id',1))]
+    u=current_app.config['SITE_URL'];paths=['/','/properties','/rooms','/events','/offers','/gallery','/facilities','/about','/contact','/faq','/privacy','/search','/booking/lookup']+[f'/rooms/{r[0]}' for r in get_db().execute(B.ROOM_SQL.replace('SELECT r.id','SELECT r.id',1))]
     return Response('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'+''.join(f'<url><loc>{u}{p}</loc></url>\n' for p in paths)+'</urlset>',mimetype='application/xml')
