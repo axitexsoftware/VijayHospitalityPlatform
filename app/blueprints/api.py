@@ -11,10 +11,16 @@ def health():
 @bp.get('/availability')
 @rate_limit('avail',60,60)
 def availability():
-    a=request.args
-    try:rs=B.search(get_db(),a.get('check_in',''),a.get('check_out',''),a.get('adults',1),a.get('children',0),category_id=a.get('category_id') or None,property_id=a.get('property_id') or None)
+    a=request.args;db=get_db()
+    try:rooms_required=int(a.get('rooms',1))
+    except (ValueError,TypeError):return err('Enter a valid number of rooms.',400,{'rooms':'Enter a number from 1 to 10.'})
+    if not 1<=rooms_required<=10:return err('Choose between 1 and 10 rooms.',400,{'rooms':'Choose between 1 and 10 rooms.'})
+    try:rs=B.search(db,a.get('check_in',''),a.get('check_out',''),a.get('adults',1),a.get('children',0),category_id=a.get('category_id') or None,property_id=a.get('property_id') or None)
     except B.Invalid as e:return err(e,400,e.errors)
-    return jsonify(count=len(rs),rooms=[dict(room_id=r['id'],number=r['number'],property=r['pname'],category=r['cat_name'],ac=bool(r['ac']),nights=r['quote']['nights'],price_per_night_paise=r['quote']['avg'],tax_paise=r['quote']['tax'],total_paise=r['quote']['total'],amenities=r['amenities']) for r in rs])
+    inventory=db.execute(f'SELECT COUNT(*) FROM ({B.ROOM_SQL})').fetchone()[0]
+    can_accommodate=len(rs)>=rooms_required
+    message='' if can_accommodate else 'No bookable rooms have been configured yet. Contact the property for availability.' if not inventory else f'Only {len(rs)} room(s) are available for these dates; {rooms_required} requested.' if rs else 'No rooms are available for those dates.'
+    return jsonify(count=len(rs),rooms_required=rooms_required,can_accommodate=can_accommodate,inventory_count=inventory,inventory_status='published' if inventory else 'not_configured',message=message,rooms=[dict(room_id=r['id'],number=r['number'],property=r['pname'],category=r['cat_name'],ac=bool(r['ac']),nights=r['quote']['nights'],price_per_night_paise=r['quote']['avg'],tax_paise=r['quote']['tax'],total_paise=r['quote']['total'],amenities=r['amenities']) for r in rs])
 @bp.get('/price-calendar')
 @rate_limit('pricecalendar',60,60)
 def price_calendar():
@@ -87,6 +93,6 @@ def payment_webhook():
 @rate_limit('chat',25,60)
 def chat():
     j=request.get_json(silent=True) or {};db=get_db()
-    out=ai.reply(db,session.get('chat_token') or j.get('token'),j.get('message',''));session['chat_token']=out['token']
+    out=ai.reply(db,session.get('chat_token') or j.get('token'),j.get('message',''),j.get('language','auto'));session['chat_token']=out['token']
     if out.get('booking'):session['refs']=(session.get('refs',[])+[out['booking']])[-10:]
-    return jsonify(reply=out['reply'],status=out.get('status'),booking=out.get('booking'))
+    return jsonify(reply=out['reply'],status=out.get('status'),booking=out.get('booking'),link=out.get('link'),unavailable=out.get('unavailable',False))

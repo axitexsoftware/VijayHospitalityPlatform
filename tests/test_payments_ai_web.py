@@ -37,6 +37,21 @@ class AI(Base):
     def tearDown(self):ai.LLM=None;super().tearDown()
     def test_unconfigured_is_honest(self):
         ai.LLM=None;self.app.config['LLM_API_KEY']='';o=ai.reply(self.db,None,'hello');self.assertTrue(o['unavailable']);self.assertNotIn('booked',o['reply'].lower())
+    def test_receptionist_language_modes_and_hindi_fallback(self):
+        self.assertIn('Respond only in natural Hindi using Devanagari',ai.system_prompt(self.db,'hi'));self.assertIn('Respond in English',ai.system_prompt(self.db,'en'))
+        ai.LLM=None;self.app.config['LLM_API_KEY']='';client=self.app.test_client();token=self.csrf(client,'/')
+        hindi=client.post('/api/chat',json={'message':'कमरे की उपलब्धता बताइए','language':'auto'},headers={'X-CSRF-Token':token}).get_json()
+        english=client.post('/api/chat',json={'message':'कमरे की उपलब्धता बताइए','language':'en'},headers={'X-CSRF-Token':token}).get_json()
+        self.assertIn('वर्चुअल रिसेप्शनिस्ट',hindi['reply']);self.assertIn('virtual receptionist',english['reply'].lower())
+    def test_local_receptionist_searches_live_inventory_in_english_and_hindi(self):
+        ai.LLM=None;self.app.config['LLM_API_KEY']='';ci=day(10);co=day(12)
+        english=ai.reply(self.db,None,f'Find an AC room from {ci} to {co} for 2 adults','en')
+        self.assertIn('Live rooms available',english['reply']);self.assertIn('Room 101',english['reply']);self.assertTrue(english['link'].startswith('/search?'))
+        hindi=ai.reply(self.db,None,f'{ci} से {co} तक एसी कमरे की उपलब्धता देखें','auto')
+        self.assertIn('उपलब्ध',hindi['reply']);self.assertIn('Room 101',hindi['reply'])
+        client=self.app.test_client();token=self.csrf(client,'/')
+        api=client.post('/api/chat',json={'message':f'Find an AC room from {ci} to {co}','language':'en'},headers={'X-CSRF-Token':token}).get_json()
+        self.assertIn('Live rooms available',api['reply']);self.assertTrue(api['link'].startswith('/search?'))
     def test_full_booking_conversation_uses_real_backend(self):
         ai.LLM=Fake(tc('search_availability',check_in=day(10),check_out=day(12),adults=2,children=0,ac=True),{'content':'Room 101 is Rs 2,240 per night. Shall I book it?'})
         o=ai.reply(self.db,None,'Two adults AC room '+day(10)+' to '+day(12));tok=o['token'];self.assertIn('Room 101',o['reply'])
@@ -74,6 +89,8 @@ class Web(Base):
         self.assertNotIn('guest-searchbar',c.get('/').get_data(as_text=True));self.assertNotIn('guest-searchbar',c.get('/search').get_data(as_text=True))
         query=dict(room_id=1,ci=day(10),co=day(12),adults=2,children=0)
         self.assertEqual(c.get('/search',query_string=query|{'room_id':''}).status_code,200)
+        grouped=c.get('/search',query_string={'ci':day(10),'co':day(12),'adults':2,'rooms':2}).get_data(as_text=True)
+        self.assertIn('2 requested',grouped);self.assertIn('View details',grouped);self.assertIn('Book this room',grouped);self.assertIn('Each reservation is confirmed separately',grouped)
         self.assertEqual(c.get('/book',query_string=query).status_code,200)
         stylesheet=c.get('/static/css/public.css');self.assertEqual(stylesheet.status_code,200);stylesheet.close()
     def test_unpriced_room_categories_are_visible_but_not_bookable(self):
@@ -100,7 +117,7 @@ class Web(Base):
         for _ in range(12):self.assertEqual(client.get('/contact').status_code,200)
     def test_public_booking_flow_and_manage(self):
         c=self.app.test_client();t=self.csrf(c,'/');q=dict(room_id=1,ci=day(10),co=day(12),adults=2,children=0)
-        self.assertIn('Select',c.get('/search',query_string=dict(ci=q['ci'],co=q['co'],adults=2)).get_data(as_text=True))
+        self.assertIn('Book this room',c.get('/search',query_string=dict(ci=q['ci'],co=q['co'],adults=2)).get_data(as_text=True))
         r=c.post('/book',query_string=q,data=dict(csrf_token=t,name='Ravi Sharma',phone='+91 98765 43210',email='r@x.in',pay_mode='hotel'));self.assertEqual(r.status_code,302);ref=r.headers['Location'].split('/')[-1]
         page=c.get('/booking/'+ref).get_data(as_text=True);self.assertIn('Booking confirmed',page);self.assertIn(ref,page)
         self.assertEqual(c.get('/booking/'+ref+'/receipt.pdf').status_code,200)
@@ -110,9 +127,16 @@ class Web(Base):
         self.assertEqual(c.post('/book',query_string=q,data=dict(name='x')).status_code,400)
     def test_api_availability_and_booking_conflict(self):
         c=self.app.test_client();t=self.csrf(c,'/');j=c.get('/api/availability',query_string=dict(check_in=day(10),check_out=day(12),adults=2)).get_json();self.assertEqual(j['count'],3)
+        group=c.get('/api/availability',query_string=dict(check_in=day(10),check_out=day(12),adults=2,rooms=2)).get_json();self.assertTrue(group['can_accommodate']);self.assertEqual(group['rooms_required'],2)
+        short=c.get('/api/availability',query_string=dict(check_in=day(10),check_out=day(12),adults=2,rooms=4)).get_json();self.assertFalse(short['can_accommodate']);self.assertIn('Only 3 room',short['message'])
+        self.assertEqual(c.get('/api/availability',query_string=dict(check_in=day(10),check_out=day(12),rooms=0)).status_code,400)
         body=dict(room_id=1,check_in=day(10),check_out=day(12),adults=2,name='Mina Das',phone='9811111111');h={'X-CSRF-Token':t}
         self.assertEqual(c.post('/api/bookings',json=body,headers=h).status_code,201);body['name']='Other Guy';body['phone']='9822222222'
         self.assertEqual(c.post('/api/bookings',json=body,headers=h).status_code,409);self.assertEqual(c.post('/api/bookings',json=body).status_code,400)
+    def test_availability_explains_unpublished_inventory(self):
+        self.db.execute("UPDATE rooms SET status='inactive'");client=self.app.test_client();dates={'check_in':day(10),'check_out':day(12),'adults':2}
+        api=client.get('/api/availability',query_string=dates).get_json();self.assertEqual(api['count'],0);self.assertEqual(api['inventory_status'],'not_configured');self.assertIn('configured yet',api['message'])
+        page=client.get('/search',query_string={'ci':day(10),'co':day(12),'adults':2}).get_data(as_text=True);self.assertIn('Online room inventory is not published yet',page);self.assertNotIn('No rooms available for those dates',page)
     def test_dashboard_reports_and_exports_use_real_data(self):
         from app.services import reports as R
         u={'id':1,'email':'x'};r=self.book(1,ci=0,co=2);P.record_manual(self.db,r['id'],'cash',100000,'',u);k=R.dashboard(self.db)

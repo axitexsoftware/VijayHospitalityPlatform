@@ -1,5 +1,5 @@
 /* base.css: tokens, reset, typography */
-:root{--maroon:#8f1d1e;--maroon-d:#5c1012;--orange:#ec6a24;--orange-d:#b84a0c;--cream:#f8f3ea;--paper:#fff;--ink:#2b2726;--mu:#6b645f;--line:#e8dfd0;--r:16px;--sh:0 1px 2px rgba(43,39,38,.05),0 10px 30px rgba(43,39,38,.07);--serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;--sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+:root{--color-royal-wine:#5B1825;--color-antique-gold:#B18A55;--color-warm-ivory:#F7F3EA;--color-espresso:#292522;--color-champagne:#E8DFD0;--color-pure-white:#FFFFFF;--color-muted-text:#77716A;--color-border:#E4DCCE;--color-wine-deep:#42121C;--color-gold-text:#765A34;--color-success-bg:#F1EFE9;--color-success-text:#4F412B;--color-warning-bg:#F5EEE1;--color-warning-text:#705629;--color-danger-bg:#F4E9E6;--color-danger-text:#5B1825;--maroon:var(--color-royal-wine);--maroon-d:var(--color-wine-deep);--orange:var(--color-antique-gold);--orange-d:var(--color-gold-text);--cream:var(--color-warm-ivory);--paper:var(--color-pure-white);--ink:var(--color-espresso);--mu:var(--color-muted-text);--line:var(--color-border);--r:12px;--sh:0 1px 2px rgba(41,37,34,.04),0 8px 22px rgba(41,37,34,.06);--serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;--sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
 *,*::before,*::after{box-sizing:border-box}
 html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
 body{margin:0;font:400 16px/1.65 var(--sans);color:var(--ink);background:var(--cream)}
@@ -8,6 +8,6 @@ a{color:var(--maroon);text-decoration-thickness:1px;text-underline-offset:3px}a:
 h1,h2,h3{font-family:var(--serif);line-height:1.2;color:var(--ink);margin:0 0 .5em;letter-spacing:-.01em}
 h1{font-size:clamp(2rem,5vw,3.4rem)}h2{font-size:clamp(1.55rem,3.2vw,2.2rem)}h3{font-size:1.2rem}
 p{margin:0 0 1em}ul{padding-left:1.2em}
-:focus-visible{outline:3px solid var(--orange);outline-offset:2px;border-radius:4px}
+:focus-visible{outline:3px solid var(--color-antique-gold);outline-offset:2px;border-radius:4px}
 .sr{position:absolute;left:-9999px}.skip:focus{left:12px;top:12px;z-index:99;background:#fff;padding:8px 12px}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}

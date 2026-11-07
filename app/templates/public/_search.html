@@ -2,6 +2,6 @@
 {% macro bar(f,cats,today,action='/search') %}<form class="sbar" id="room-search" method="get" action="{{action}}">
 <label>Check-in<input type="date" name="ci" id="ci" min="{{today}}" value="{{f.ci}}" required></label><label>Check-out<input type="date" name="co" data-after="ci" min="{{today}}" value="{{f.co}}" required></label>
 {{calendar()}}
-<label>Adults<input type="number" name="adults" min="1" max="12" value="{{f.adults or 2}}" style="width:80px"></label><label>Children<input type="number" name="children" min="0" max="12" value="{{f.children or 0}}" style="width:80px"></label>
+<label>Adults<input type="number" name="adults" min="1" max="12" value="{{f.adults or 2}}" style="width:80px"></label><label>Children<input type="number" name="children" min="0" max="12" value="{{f.children or 0}}" style="width:80px"></label><label>Rooms<input type="number" name="rooms" min="1" max="10" value="{{f.rooms or 1}}" required></label>
 <label>Room type<select name="cat"><option value="">Any</option>{% for c in cats %}<option value="{{c.id}}" {{'selected' if f.cat|string==c.id|string}}>{{c.pname}}: {{c.name}}</option>{% endfor %}</select></label>
 <label>Budget per night (₹)<input type="number" name="budget" min="0" value="{{f.budget}}" style="width:110px" placeholder="Optional"></label><button class="btn" type="submit">Search rooms</button></form>{% endmacro %}

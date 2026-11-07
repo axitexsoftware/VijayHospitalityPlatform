@@ -60,15 +60,17 @@ def room(rid):
     return render_template('public/room.html',r=r,today=today().isoformat(),tomorrow=(today()+dtm.timedelta(days=1)).isoformat(),price=B.price_per_night(db,r,today().isoformat()))
 @bp.get('/search')
 def search():
-    f={k:request.args.get(k,'') for k in('ci','co','adults','children','cat','budget')};res=None;err={}
+    db=get_db();f={k:request.args.get(k,'') for k in('ci','co','adults','children','rooms','cat','budget')};res=None;err={};inventory_count=db.execute(f'SELECT COUNT(*) FROM ({B.ROOM_SQL})').fetchone()[0]
     if f['ci'] and f['co']:
         try:
+            requested_rooms=int(f['rooms'] or 1)
+            if not 1<=requested_rooms<=10:raise ValueError('Choose between 1 and 10 rooms.')
             bud=int(float(f['budget'])*100) if f['budget'] else None
-            res=B.search(get_db(),f['ci'],f['co'],f['adults'] or 1,f['children'] or 0,category_id=f['cat'] or None,max_price_paise=bud)
-            for room in res:room['cat_images']=category_media(get_db(),room['category_id'])
+            res=B.search(db,f['ci'],f['co'],f['adults'] or 1,f['children'] or 0,category_id=f['cat'] or None,max_price_paise=bud)
+            for room in res:room['cat_images']=category_media(db,room['category_id'])
         except B.Invalid as e:err=e.errors or {'dates':str(e)}
-        except ValueError:err={'budget':'Enter a valid budget.'}
-    return render_template('public/search.html',f=f,res=res,err=err,cats=cats(),today=today().isoformat())
+        except ValueError as e:err={'rooms' if 'room' in str(e) else 'budget':str(e) or 'Enter a valid value.'}
+    return render_template('public/search.html',f=f,res=res,err=err,cats=cats(),today=today().isoformat(),inventory_count=inventory_count)
 @bp.route('/book',methods=['GET','POST'])
 @rate_limit('book',12,600)
 def book():
