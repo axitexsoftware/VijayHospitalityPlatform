@@ -83,14 +83,29 @@ class Web(Base):
     def test_public_page_templates_and_booking_entry_render(self):
         c=self.app.test_client();paths=('/','/properties','/rooms','/rooms/1','/events','/offers','/gallery','/facilities','/contact','/about','/faq','/privacy','/search','/booking/lookup')
         for path in paths:self.assertEqual(c.get(path).status_code,200,path)
+        self.assertIn('Gaya-Nawada Road',c.get('/').get_data(as_text=True));self.assertIn('24.7981768,85.045966',c.get('/contact').get_data(as_text=True))
+        home=c.get('/').get_data(as_text=True)
+        self.assertIn('href="/about"',home);self.assertIn('href="/search" aria-current="false">Search rooms</a>',home)
+        for text in ('Welcome to Vijay Utsav Hall','A convenient destination in Manpur, Gaya','Located near Sikhar More on Gaya-Nawada Road','Accommodation enquiries','Weddings and receptions','Family celebrations','Guest assistance','Check Room Availability','Enquire About Banquet','Plan Your Wedding','View Gallery','Get Directions','Talk to IRA'):
+            self.assertIn(text,home)
+        about=c.get('/about').get_data(as_text=True)
+        for text in ('Wedding, marriage function and reception enquiries.','Housekeeping and guest assistance, subject to property confirmation.','Our vision','Our mission'):
+            self.assertIn(text,about)
         self.assertIn('selected',c.get('/contact',query_string={'kind':'event'}).get_data(as_text=True))
         sitemap=c.get('/sitemap.xml').get_data(as_text=True);self.assertIn('/events',sitemap);self.assertIn('/offers',sitemap)
         facilities=c.get('/facilities').get_data(as_text=True);self.assertIn('facility-jump',facilities);self.assertIn('name="ci"',facilities);self.assertIn('Destination',facilities)
         self.assertNotIn('guest-searchbar',c.get('/').get_data(as_text=True));self.assertNotIn('guest-searchbar',c.get('/search').get_data(as_text=True))
         query=dict(room_id=1,ci=day(10),co=day(12),adults=2,children=0)
         self.assertEqual(c.get('/search',query_string=query|{'room_id':''}).status_code,200)
+        self.db.execute("INSERT INTO room_images(room_id,path,alt,sort) VALUES(1,'img/room-ac-480.avif','Test AC room',0)")
         grouped=c.get('/search',query_string={'ci':day(10),'co':day(12),'adults':2,'rooms':2}).get_data(as_text=True)
         self.assertIn('2 requested',grouped);self.assertIn('View details',grouped);self.assertIn('Book this room',grouped);self.assertIn('Each reservation is confirmed separately',grouped)
+        for detail in ('Manpur, Gaya','Up to 2 adults','Nightly rate breakdown','18 Nov','Room charges','Total'):
+            self.assertIn(detail,grouped)
+        for control in ('SELECT A ROOM AND RATE','filter-room-type','filter-facility','sort-rooms','data-clear-filters','data-room-photo','View Rates','data-rate-total-label','data-book-price-without-tax','search.js'):
+            self.assertIn(control,grouped)
+        facilities=c.get('/facilities').get_data(as_text=True);self.assertIn('Details to confirm',facilities);self.assertIn('Accessibility and luggage assistance',facilities)
+        faq=c.get('/faq').get_data(as_text=True);self.assertIn('not confirmed event bookings',faq);self.assertIn('shown during booking',faq)
         self.assertEqual(c.get('/book',query_string=query).status_code,200)
         stylesheet=c.get('/static/css/public.css');self.assertEqual(stylesheet.status_code,200);stylesheet.close()
     def test_unpriced_room_categories_are_visible_but_not_bookable(self):
@@ -137,6 +152,10 @@ class Web(Base):
         self.db.execute("UPDATE rooms SET status='inactive'");client=self.app.test_client();dates={'check_in':day(10),'check_out':day(12),'adults':2}
         api=client.get('/api/availability',query_string=dates).get_json();self.assertEqual(api['count'],0);self.assertEqual(api['inventory_status'],'not_configured');self.assertIn('configured yet',api['message'])
         page=client.get('/search',query_string={'ci':day(10),'co':day(12),'adults':2}).get_data(as_text=True);self.assertIn('Online room inventory is not published yet',page);self.assertNotIn('No rooms available for those dates',page)
+    def test_search_explains_active_rooms_without_published_rates(self):
+        self.db.execute('UPDATE room_categories SET base_price_paise=0')
+        client=self.app.test_client();page=client.get('/search',query_string={'ci':day(10),'co':day(12),'adults':2}).get_data(as_text=True)
+        self.assertIn('3 active room listings are configured',page);self.assertIn('Room rates are not published yet',page);self.assertIn('Ask about a room',page)
     def test_dashboard_reports_and_exports_use_real_data(self):
         from app.services import reports as R
         u={'id':1,'email':'x'};r=self.book(1,ci=0,co=2);P.record_manual(self.db,r['id'],'cash',100000,'',u);k=R.dashboard(self.db)

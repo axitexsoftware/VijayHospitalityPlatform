@@ -8,12 +8,11 @@ bp=Blueprint('public',__name__)
 GALLERY=[('home','Vijay Utsav Hall hotel building with the paved lawn in front'),('hotel-night','Vijay Utsav Hall hotel lit up at night'),('hotel-decor','Hotel entrance decorated for an event'),('room-ac','Air-conditioned guest room with double bed'),('room-b','Guest room with double bed and cove lighting'),('room-c','Spacious guest room'),('room-d','Guest room with wardrobe'),('room-102','Doorway of room 102'),
  ('garden-gate','Vijay Garden entrance arch'),('lawn-stage','Banquet lawn with decorated stage'),('event-stage','Event stage and open lawn'),('garden-stage','Landscaped garden with stage'),('floral','Floral entrance arch'),('walkway','Garden walkway with arches')]
 FACILITIES=[
-    dict(id='comfort',eyebrow='Stay essentials',title='Comfort and room care',description='Practical comforts to help you settle in and feel at ease.',items=['Private bathroom','Housekeeping','Electronic safe']),
-    dict(id='arrival',eyebrow='Arrival and access',title='A smoother arrival',description='Access and arrival assistance for guests and families.',items=['Private entrance','Accessible car parking','Accessible entrance and exit','Luggage assistance and storage']),
-    dict(id='support',eyebrow='Guest support',title='Help when you need it',description='Reception and guest assistance throughout your visit.',items=['Reception','Telephone service','Guest assistance','Security guard','24-hour security','Torch availability']),
-    dict(id='events',eyebrow='Work and celebrations',title='Meet, work and celebrate',description='Spaces and services for gatherings, business and special occasions.',items=['Business centre','Conference hall','Banquet hall'])]
-FAQ=[('What are the check-in and check-out times?','Check-in is from 12:00 PM and check-out is at 12:00 PM.'),('What room types do you have?','AC and Non-AC rooms, each with a private bathroom and housekeeping.'),('How do I book?','Search your dates, choose a room and enter your details. You can pay at the hotel or online when online payment is enabled.'),
- ('Can I cancel or change my booking?','Yes. Use Manage booking with your booking reference and mobile number. Free cancellation applies until the deadline shown on your booking page.'),('Do you host weddings and events?','Yes, at Vijay Garden. Send an enquiry through the contact page or the AI receptionist.'),('Is parking available?','Accessible car parking and an accessible entrance and exit are available.')]
+    dict(id='comfort',eyebrow='Accommodation details',title='Room options and amenities',description='Room categories, guest limits, rates and amenities vary by listing. Check the current room details before choosing.',items=['Published room categories and rates','Amenities shown on each room listing','Guest limits shown in room details']),
+    dict(id='arrival',eyebrow='Plan your arrival',title='Arrival and access arrangements',description='Confirm arrival times, parking and accessibility arrangements with the property before travelling.',items=['Check-in and check-out times','Parking availability and arrangements','Accessibility and luggage assistance']),
+    dict(id='support',eyebrow='Guest support',title='Booking and guest assistance',description='The website shows current booking options where they have been configured. Contact the property about anything not listed.',items=['Contact details for each property','Payment options shown during booking','Changes, cancellations and refund terms']),
+    dict(id='events',eyebrow='Weddings and celebrations',title='Plan an event enquiry',description='Share your event requirements with the property team. An enquiry is not a confirmed event booking.',items=['Weddings and marriage functions','Receptions, engagements and family celebrations','Dates, capacity, catering and prices confirmed directly'])]
+FAQ=[('What are the check-in and check-out times?','Please use the times shown in your booking details or confirm them with the property before arrival.'),('Which room types are available?','Room categories and rates shown on the website come from the property listings. Check your dates for current availability; contact the team if the room type you need is not shown.'),('How do I book a room?','Search your dates and guest count, choose an available room, review the total and submit your details. A room is confirmed only when the website displays a booking confirmation.'),('Which payment methods are accepted?','The payment options currently available are shown during booking. Contact the property to confirm any other payment arrangements.'),('Can I change or cancel my booking?','Use Manage booking with your booking reference and mobile number. Review the terms shown with your booking, or contact the property if you need help.'),('Can I book a wedding or event online?','The website accepts event enquiries, not confirmed event bookings. Send your preferred date, event type and guest estimate; the property team will confirm availability, capacity, arrangements and prices.'),('Which facilities are available?','Facilities and amenities can vary by room and property. Review the specific room listing and confirm any important requirement directly with the property.'),('Where is Vijay Utsav Hall?','The property address and directions are listed on the Properties and Contact pages. Please confirm the best approach route with the property if needed.')]
 def props():return get_db().execute('SELECT * FROM properties WHERE active=1 ORDER BY id').fetchall()
 def cats():
     db=get_db();out=[]
@@ -60,17 +59,27 @@ def room(rid):
     return render_template('public/room.html',r=r,today=today().isoformat(),tomorrow=(today()+dtm.timedelta(days=1)).isoformat(),price=B.price_per_night(db,r,today().isoformat()))
 @bp.get('/search')
 def search():
-    db=get_db();f={k:request.args.get(k,'') for k in('ci','co','adults','children','rooms','cat','budget')};res=None;err={};inventory_count=db.execute(f'SELECT COUNT(*) FROM ({B.ROOM_SQL})').fetchone()[0]
+    db=get_db();f={k:request.args.get(k,'') for k in('ci','co','adults','children','rooms','cat','budget')};res=None;err={};inventory_count=db.execute(f'SELECT COUNT(*) FROM ({B.ROOM_SQL})').fetchone()[0];categories=cats()
+    active_room_count=db.execute("SELECT COUNT(*) FROM rooms r JOIN room_categories c ON c.id=r.category_id JOIN properties p ON p.id=r.property_id WHERE r.status='active' AND c.active=1 AND p.active=1").fetchone()[0]
+    nights=0;search_properties=[];available_amenities=[];category_count=0
     if f['ci'] and f['co']:
         try:
             requested_rooms=int(f['rooms'] or 1)
             if not 1<=requested_rooms<=10:raise ValueError('Choose between 1 and 10 rooms.')
             bud=int(float(f['budget'])*100) if f['budget'] else None
             res=B.search(db,f['ci'],f['co'],f['adults'] or 1,f['children'] or 0,category_id=f['cat'] or None,max_price_paise=bud)
-            for room in res:room['cat_images']=category_media(db,room['category_id'])
+            stay_start=d(f['ci'])
+            nights=(d(f['co'])-stay_start).days
+            for room in res:
+                room['cat_images']=category_media(db,room['category_id'])
+                room['nightly_rates']=[{'date':(stay_start+dtm.timedelta(days=i)).isoformat(),'amount':amount} for i,amount in enumerate(room['quote']['per_night'])]
+            category_count=len({room['category_id'] for room in res})
+            available_amenities=sorted({amenity for room in res for amenity in room['amenities']},key=str.casefold)
         except B.Invalid as e:err=e.errors or {'dates':str(e)}
         except ValueError as e:err={'rooms' if 'room' in str(e) else 'budget':str(e) or 'Enter a valid value.'}
-    return render_template('public/search.html',f=f,res=res,err=err,cats=cats(),today=today().isoformat(),inventory_count=inventory_count)
+    property_ids={room['pid'] for room in res or []}
+    search_properties=[dict(p) for p in props() if not property_ids or p['id'] in property_ids]
+    return render_template('public/search.html',f=f,res=res,err=err,cats=categories,today=today().isoformat(),inventory_count=inventory_count,active_room_count=active_room_count,nights=nights,search_properties=search_properties,available_amenities=available_amenities,category_count=category_count,policy_hours=current_app.config['CANCEL_FREE_HOURS'],late_refund_percent=current_app.config['LATE_CANCEL_REFUND_PERCENT'],online_payment_ready=P.configured())
 @bp.route('/book',methods=['GET','POST'])
 @rate_limit('book',12,600)
 def book():

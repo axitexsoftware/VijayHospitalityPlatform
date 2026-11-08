@@ -10,13 +10,14 @@ function updateLanguageUI(){
  inp.placeholder=words('Type your message','अपना संदेश लिखें');inp.setAttribute('aria-label',words('Your message','आपका संदेश'));
  open.setAttribute('aria-label',words('Chat with reception','रिसेप्शन से बात करें'));var launcher=open.querySelector('[data-chat-open-label]');if(launcher)launcher.textContent=words('Chat with reception','रिसेप्शन से बात करें');
  var title=document.querySelector('[data-chat-title]'),subtitle=document.querySelector('[data-chat-subtitle]'),languageLabel=document.querySelector('[data-chat-language-label]');
- if(title)title.textContent=words('Virtual receptionist','वर्चुअल रिसेप्शनिस्ट');if(subtitle)subtitle.textContent=words('Room help · English / हिंदी','कमरों की जानकारी · English / हिंदी');if(languageLabel)languageLabel.textContent=words('Chat language','चैट की भाषा');
+ if(title)title.textContent=words('IRA · Vijay Utsav Assistant','IRA · विजय उत्सव सहायक');if(subtitle)subtitle.textContent=words('Stay and event enquiries · English / हिंदी','ठहरने और कार्यक्रम की पूछताछ · English / हिंदी');if(languageLabel)languageLabel.textContent=words('Chat language','चैट की भाषा');
  form.querySelector('button').textContent=words('Send','भेजें');
  document.querySelectorAll('[data-chat-prompt]').forEach(function(button){button.textContent=isHindi()?button.dataset.hi:button.dataset.en});
 }
 function toggle(){box.classList.toggle('open');open.setAttribute('aria-expanded',box.classList.contains('open'));
- if(box.classList.contains('open')&&!started){started=true;add(words('Welcome to Vijay Hospitality. I can check room availability and help with bookings. When would you like to stay?','विजय हॉस्पिटैलिटी में आपका स्वागत है। मैं कमरे की उपलब्धता और बुकिंग में मदद कर सकता/सकती हूँ। आप कब ठहरना चाहते हैं?'),'b');inp.focus()}}
+ if(box.classList.contains('open')&&!started){started=true;add(words('Namaste! Welcome to Vijay Utsav Hall. I am IRA, your virtual assistant. I can help you explore accommodation, enquire about banquet facilities, plan a wedding or reception, and find information about the property. How may I assist you today?','नमस्ते! विजय उत्सव हॉल में आपका स्वागत है। मैं IRA, आपकी वर्चुअल सहायक हूँ। मैं ठहरने, बैंक्वेट की पूछताछ, शादी या रिसेप्शन की योजना और संपत्ति की जानकारी में मदद कर सकती हूँ। आज मैं आपकी कैसे सहायता करूँ?'),'b');inp.focus()}}
 open.addEventListener('click',toggle);document.getElementById('chat-close').addEventListener('click',toggle);
+document.querySelectorAll('[data-open-chat]').forEach(function(button){button.addEventListener('click',function(){if(!box.classList.contains('open'))toggle()})});
 if(language)language.addEventListener('change',function(){try{localStorage.setItem(storageKey,language.value)}catch(e){}updateLanguageUI();if(started)add(words('Language preference updated.','भाषा की प्राथमिकता बदल दी गई है।'),'b')});
 document.querySelectorAll('[data-chat-prompt]').forEach(function(button){button.addEventListener('click',function(){if(busy)return;inp.value=isHindi()?button.dataset.hi:button.dataset.en;form.requestSubmit()})});
 updateLanguageUI();

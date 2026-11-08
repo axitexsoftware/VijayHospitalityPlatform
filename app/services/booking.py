@@ -50,7 +50,7 @@ def quote(db,room,ci,co):
     nights=(d(co)-d(ci)).days;per=[price_per_night(db,room,n,nights,ci) for n in daterange(ci,co)];sub=sum(per);tax=round(sub*cfg('TAX_PERCENT')/100)
     return dict(nights=len(per),per_night=per,room_total=sub,tax=tax,total=sub+tax,avg=round(sub/len(per)))
 ROOM_SQL='''SELECT r.id,r.number,r.floor,r.description,r.category_id,r.price_override_paise,c.name cat_name,c.ac,c.image,c.description cat_desc,c.max_adults,c.max_children,c.base_price_paise,
- p.id pid,p.name pname FROM rooms r JOIN room_categories c ON c.id=r.category_id JOIN properties p ON p.id=r.property_id
+ p.id pid,p.name pname,p.address paddress FROM rooms r JOIN room_categories c ON c.id=r.category_id JOIN properties p ON p.id=r.property_id
  WHERE r.status='active' AND c.active=1 AND p.active=1 AND COALESCE(r.price_override_paise,c.base_price_paise)>0'''
 def free_sql():return " AND NOT EXISTS(SELECT 1 FROM room_nights n WHERE n.room_id=r.id AND n.night>=:ci AND n.night<:co)"
 def search(db,ci,co,adults=1,children=0,category_id=None,property_id=None,max_price_paise=None,allow_past=False):
