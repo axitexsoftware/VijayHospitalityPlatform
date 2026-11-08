@@ -18,9 +18,11 @@ def availability():
     try:rs=B.search(db,a.get('check_in',''),a.get('check_out',''),a.get('adults',1),a.get('children',0),category_id=a.get('category_id') or None,property_id=a.get('property_id') or None)
     except B.Invalid as e:return err(e,400,e.errors)
     inventory=db.execute(f'SELECT COUNT(*) FROM ({B.ROOM_SQL})').fetchone()[0]
-    can_accommodate=len(rs)>=rooms_required
-    message='' if can_accommodate else 'No bookable rooms have been configured yet. Contact the property for availability.' if not inventory else f'Only {len(rs)} room(s) are available for these dates; {rooms_required} requested.' if rs else 'No rooms are available for those dates.'
-    return jsonify(count=len(rs),rooms_required=rooms_required,can_accommodate=can_accommodate,inventory_count=inventory,inventory_status='published' if inventory else 'not_configured',message=message,rooms=[dict(room_id=r['id'],number=r['number'],property=r['pname'],category=r['cat_name'],ac=bool(r['ac']),nights=r['quote']['nights'],price_per_night_paise=r['quote']['avg'],tax_paise=r['quote']['tax'],total_paise=r['quote']['total'],amenities=r['amenities']) for r in rs])
+    _,tax_configured=B.tax_configuration(db)
+    can_accommodate=len(rs)>=rooms_required and tax_configured
+    message='' if can_accommodate else 'No bookable rooms have been configured yet. Contact the property for availability.' if not inventory else 'Tax settings need admin confirmation before online booking can be enabled.' if not tax_configured else f'Only {len(rs)} room(s) are available for these dates; {rooms_required} requested.' if rs else 'No rooms are available for those dates.'
+    status='not_configured' if not inventory else 'tax_unconfirmed' if not tax_configured else 'published'
+    return jsonify(count=len(rs),rooms_required=rooms_required,can_accommodate=can_accommodate,inventory_count=inventory,inventory_status=status,tax_configured=tax_configured,message=message,rooms=[dict(room_id=r['id'],number=r['number'],property=r['pname'],category=r['cat_name'],ac=bool(r['ac']),nights=r['quote']['nights'],price_per_night_paise=r['quote']['avg'],tax_paise=r['quote']['tax'],total_paise=r['quote']['total'],tax_configured=r['quote']['tax_configured'],amenities=r['amenities']) for r in rs])
 @bp.get('/price-calendar')
 @rate_limit('pricecalendar',60,60)
 def price_calendar():
@@ -33,8 +35,10 @@ def price_calendar():
 def price_quote():
     try:
         ci,co,_,_=B.validate_stay(request.args.get('check_in',''),request.args.get('check_out',''),1,0)
-        q=DP.quote(get_db(),request.args.get('category_id',''),ci,co)
-        q['tax_paise']=round(q['room_total_paise']*current_app.config['TAX_PERCENT']/100)
+        db=get_db();q=DP.quote(db,request.args.get('category_id',''),ci,co)
+        tax_percent,tax_configured=B.tax_configuration(db)
+        q['tax_configured']=tax_configured
+        q['tax_paise']=round(q['room_total_paise']*tax_percent/100) if tax_configured else 0
         q['total_paise']=q['room_total_paise']+q['tax_paise']
         return jsonify(q)
     except B.Invalid as e:return err(e,400,e.errors)

@@ -36,7 +36,7 @@ class DynamicPricingTests(Base):
         saturday = future_weekday(5)
         self.add_rule('weekend', 15, dow='5,6')
         result = DP.nightly(self.db, 1, saturday)
-        self.assertEqual(result['price_paise'], 230000)
+        self.assertEqual(result['price_paise'], 207000)
         self.assertTrue(result['peak'])
         self.assertEqual([x['name'] for x in result['rules']], ['Test rule'])
 
@@ -67,10 +67,10 @@ class DynamicPricingTests(Base):
         reservation = B.create_reservation(
             self.db, 1, saturday, sunday, 1, 0, 'Asha Kumar', '9876543210', None,
         )
-        self.assertEqual(reservation['room_total_paise'], 240000)
+        self.assertEqual(reservation['room_total_paise'], 216000)
         self.db.execute('UPDATE dynamic_rules SET pct=80 WHERE name=?', ('Test rule',))
         stored = B.get_res(self.db, reservation['id'])
-        self.assertEqual(stored['room_total_paise'], 240000)
+        self.assertEqual(stored['room_total_paise'], 216000)
 
     def test_occupancy_surge(self):
         self.enable()
@@ -80,7 +80,7 @@ class DynamicPricingTests(Base):
         B.create_reservation(self.db, 1, ci, co, 1, 0, 'Asha Kumar', '9876543210', None)
         self.assertEqual(DP.occupancy(self.db, 1, ci), 50)
         self.add_rule('occupancy', 20, threshold=50)
-        self.assertEqual(DP.nightly(self.db, 1, ci)['price_paise'], 240000)
+        self.assertEqual(DP.nightly(self.db, 1, ci)['price_paise'], 216000)
 
     def test_caps_limit_increase_and_discount(self):
         self.enable(max_increase_pct=10, max_discount_pct=15)
@@ -95,7 +95,7 @@ class DynamicPricingTests(Base):
         self.enable(enabled=False)
         self.add_rule('weekend', 25, dow='5,6')
         result = DP.nightly(self.db, 1, future_weekday(5))
-        self.assertEqual(result['price_paise'], 200000)
+        self.assertEqual(result['price_paise'], 180000)
         self.assertEqual(result['rules'], [])
 
     def test_invalid_dates_are_rejected(self):

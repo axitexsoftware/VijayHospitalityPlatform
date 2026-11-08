@@ -12,6 +12,14 @@ class Unavailable(BookingError):pass
 class Invalid(BookingError):pass
 class NotFound(BookingError):pass
 def cfg(k):return current_app.config[k]
+def tax_configuration(db):
+    confirmed=setting(db,'tax_percent_confirmed')
+    value=setting(db,'tax_percent')
+    if confirmed is not None:
+        try:percent=float(value)
+        except (TypeError,ValueError):return 0.0,False
+        return (percent,True) if confirmed=='1' and 0<=percent<=100 else (0.0,False)
+    return 0.0,False
 def audit(db,user,action,entity,eid,detail=''):
     db.execute('INSERT INTO audit_logs(at,user_id,actor,action,entity,entity_id,detail) VALUES(?,?,?,?,?,?,?)',(now_s(),user['id'] if user else None,user['email'] if user else 'system',action,entity,str(eid),detail[:500]))
 def expire_holds(db):
@@ -47,8 +55,8 @@ def price_per_night(db,room,night,nights=1,check_in=None):
         base=r[0] if r else room['base_price_paise']
     return DP.nightly(db,room['category_id'],night,base,nights,check_in)['price_paise']
 def quote(db,room,ci,co):
-    nights=(d(co)-d(ci)).days;per=[price_per_night(db,room,n,nights,ci) for n in daterange(ci,co)];sub=sum(per);tax=round(sub*cfg('TAX_PERCENT')/100)
-    return dict(nights=len(per),per_night=per,room_total=sub,tax=tax,total=sub+tax,avg=round(sub/len(per)))
+    nights=(d(co)-d(ci)).days;per=[price_per_night(db,room,n,nights,ci) for n in daterange(ci,co)];sub=sum(per);tax_percent,tax_configured=tax_configuration(db);tax=round(sub*tax_percent/100) if tax_configured else 0
+    return dict(nights=len(per),per_night=per,room_total=sub,tax=tax,total=sub+tax,avg=round(sub/len(per)),tax_configured=tax_configured,tax_percent=tax_percent if tax_configured else None)
 ROOM_SQL='''SELECT r.id,r.number,r.floor,r.description,r.category_id,r.price_override_paise,c.name cat_name,c.ac,c.image,c.description cat_desc,c.max_adults,c.max_children,c.base_price_paise,
  p.id pid,p.name pname,p.address paddress FROM rooms r JOIN room_categories c ON c.id=r.category_id JOIN properties p ON p.id=r.property_id
  WHERE r.status='active' AND c.active=1 AND p.active=1 AND COALESCE(r.price_override_paise,c.base_price_paise)>0'''
@@ -91,6 +99,7 @@ def _insert_nights(db,room_id,rid,ci,co):
 def create_reservation(db,room_id,ci,co,adults,children,name,phone,email,source='web',user=None,hold_minutes=None,notes=None,allow_past=False):
     ci,co,adults,children=validate_stay(ci,co,adults,children,allow_past);name,phone,email=validate_customer(name,phone,email)
     if source not in('web','ai','walk-in','phone'):raise Invalid('Invalid booking source.')
+    if not tax_configuration(db)[1]:raise Invalid('Tax settings must be confirmed in Admin before accepting bookings.',{'tax':'Confirm the applicable tax percentage in Categories and rates.'})
     with tx(db):
         expire_holds(db)
         room=db.execute(ROOM_SQL+' AND r.id=?',(int(room_id),)).fetchone()
@@ -124,6 +133,7 @@ def cancel(db,rid,reason='',user=None,by_customer=False):
     return get_res(db,rid),due
 def modify(db,rid,ci,co,adults,children,user=None):
     ci,co,adults,children=validate_stay(ci,co,adults,children,allow_past=bool(user))
+    if not tax_configuration(db)[1]:raise Invalid('Tax settings must be confirmed in Admin before changing booking totals.',{'tax':'Confirm the applicable tax percentage in Categories and rates.'})
     with tx(db):
         res=get_res(db,rid)
         if res['status'] not in('pending','confirmed'):raise Invalid('Only upcoming bookings can be modified.')

@@ -1,4 +1,5 @@
-import os,secrets,io,datetime as dtm
+import os,secrets,io,datetime as dtm,json,hashlib,hmac
+from decimal import Decimal,InvalidOperation
 from flask import Blueprint,render_template,request,redirect,url_for,flash,session,abort,Response,current_app,g
 from PIL import Image
 from ..db import get_db,tx,setting,set_setting
@@ -123,7 +124,160 @@ def categories():
             B.audit(db,g.user,'category_saved','category',f.get('id',''),f['name']);flash('Category saved.','ok')
         except Exception:flash('Could not save the category. Check the name is unique for the property and numbers are valid.','error')
         return redirect(url_for('admin.categories'))
-    return render_template('admin/categories.html',cats=db.execute('SELECT c.*,p.name pname FROM room_categories c JOIN properties p ON p.id=c.property_id ORDER BY p.id,c.name').fetchall(),props=db.execute('SELECT * FROM properties').fetchall(),rules=db.execute('SELECT x.*,c.name cat FROM pricing_rules x JOIN room_categories c ON c.id=x.category_id ORDER BY x.start_date').fetchall())
+    tax_percent=setting(db,'tax_percent')
+    tax_confirmed=B.tax_configuration(db)[1]
+    if tax_percent is None and current_app.config.get('TAX_PERCENT_CONFIGURED'):
+        tax_percent=f"{current_app.config['TAX_PERCENT']:.2f}"
+    return render_template('admin/categories.html',cats=db.execute('SELECT c.*,p.name pname FROM room_categories c JOIN properties p ON p.id=c.property_id ORDER BY p.id,c.name').fetchall(),props=db.execute('SELECT * FROM properties').fetchall(),rules=db.execute('SELECT x.*,c.name cat FROM pricing_rules x JOIN room_categories c ON c.id=x.category_id ORDER BY x.start_date').fetchall(),tax_percent=tax_percent or '',tax_confirmed=tax_confirmed)
+
+def _inventory_categories(db,form=None):
+    rows=[dict(r) for r in db.execute('SELECT c.id,c.name,c.ac,c.base_price_paise,c.max_adults,c.max_children,c.property_id,p.name pname FROM room_categories c JOIN properties p ON p.id=c.property_id WHERE c.active=1 AND p.active=1 ORDER BY p.id,c.ac DESC,c.name')]
+    for row in rows:
+        room_key=f"rooms_{row['id']}";rate_key=f"rate_{row['id']}"
+        existing=db.execute('SELECT id,number,status,category_id,price_override_paise FROM rooms WHERE property_id=? AND category_id=? ORDER BY number',(row['property_id'],row['id'])).fetchall()
+        row['existing_rooms']=[dict(x) for x in existing]
+        row['room_numbers']='\n'.join(x['number'] for x in existing)
+        row['rate_value']=f"{row['base_price_paise']/100:.2f}" if row['base_price_paise'] else ''
+        if form is not None:
+            if rate_key in form:row['rate_value']=form.get(rate_key,'')
+            if room_key in form:row['room_numbers']='\n'.join(form.getlist(room_key))
+            for field in ('max_adults','max_children'):
+                key=f"{field}_{row['id']}"
+                if key in form:row[field]=form.get(key,'')
+    return rows
+
+def _inventory_payload(db,form):
+    errors=[];rows=_inventory_categories(db);expected={str(r['id']) for r in rows};submitted=form.getlist('category_id')
+    if not rows:errors.append('No active room categories exist under active properties.')
+    if len(submitted)!=len(set(submitted)) or set(submitted)!=expected:errors.append('Submit each active property/category exactly once.')
+    proposal=[];seen_numbers={}
+    for category in rows:
+        cid=category['id'];pid=category['property_id'];name=category['name'];pname=category['pname']
+        rate_text=(form.get(f'rate_{cid}','') or '').strip()
+        try:
+            rate=Decimal(rate_text)
+            if not rate.is_finite() or rate<=0 or rate>Decimal('10000000') or rate!=rate.quantize(Decimal('0.01')):raise ValueError
+            rate_paise=int(rate*100)
+        except (InvalidOperation,ValueError):
+            errors.append(f'{pname} · {name}: enter an approved nightly rate with at most two decimal places.')
+            rate_paise=0
+        occupancy={}
+        for field,label,low,high in (('max_adults','maximum adults',1,12),('max_children','maximum children',0,12)):
+            try:
+                number=int(form.get(f'{field}_{cid}',''))
+                if not low<=number<=high:raise ValueError
+            except (TypeError,ValueError):
+                errors.append(f'{pname} · {name}: {label} must be between {low} and {high}.')
+                number=low
+            occupancy[field]=number
+        room_numbers=[]
+        for value in form.getlist(f'rooms_{cid}'):
+            for raw in value.replace(',','\n').splitlines():
+                number=raw.strip()
+                if not number:continue
+                if len(number)>10:
+                    errors.append(f'{pname} · {name}: room number “{number}” exceeds 10 characters.')
+                    continue
+                key=(pid,number.casefold())
+                if key in seen_numbers:
+                    errors.append(f'{pname}: duplicate room number “{number}” appears in more than one category or row.')
+                    continue
+                seen_numbers[key]=cid
+                existing=db.execute('SELECT id,category_id,status,price_override_paise FROM rooms WHERE property_id=? AND lower(number)=lower(?)',(pid,number)).fetchone()
+                if existing and existing['category_id']!=cid:
+                    errors.append(f'{pname}: room {number} is already assigned to another category. Reassign it in Admin → Rooms first.')
+                    continue
+                room_numbers.append({'number':number,'existing_id':existing['id'] if existing else None,'was_inactive':bool(existing and existing['status']!='active'),'has_price_override':bool(existing and existing['price_override_paise'])})
+        if not room_numbers:errors.append(f'{pname} · {name}: enter at least one actual room number.')
+        proposal.append({'category_id':cid,'property_id':pid,'property':pname,'category':name,'ac':bool(category['ac']),'rate_paise':rate_paise,'max_adults':occupancy['max_adults'],'max_children':occupancy['max_children'],'rooms':room_numbers})
+    tax_text=(form.get('tax_percent','') or '').strip();tax_confirmed=form.get('confirm_tax')=='1'
+    if not tax_text:
+        if tax_confirmed:errors.append('Enter the management-approved tax percentage; a blank value cannot be confirmed as 0%.')
+        tax_value=''
+    else:
+        try:
+            tax=Decimal(tax_text)
+            if not tax.is_finite() or not 0<=tax<=100 or tax!=tax.quantize(Decimal('0.01')):raise ValueError
+            tax_value=format(tax,'f')
+        except (InvalidOperation,ValueError):
+            errors.append('Tax must be a percentage from 0 to 100 with at most two decimal places, or remain blank and pending.')
+            tax_value=''
+    return {'categories':proposal,'tax_percent':tax_value,'tax_confirmed':tax_confirmed},errors
+
+def _inventory_setup_page(db,form=None,errors=None,status=200):
+    tax_percent=setting(db,'tax_percent')
+    if tax_percent is None and current_app.config.get('TAX_PERCENT_CONFIGURED'):tax_percent=f"{current_app.config['TAX_PERCENT']:.2f}"
+    if form is not None and 'tax_percent' in form:tax_percent=form.get('tax_percent','')
+    tax_confirmed=B.tax_configuration(db)[1]
+    if form is not None:tax_confirmed=form.get('confirm_tax')=='1'
+    return render_template('admin/inventory_setup.html',categories=_inventory_categories(db,form),tax_percent=tax_percent or '',tax_confirmed=tax_confirmed,errors=errors or []),status
+
+@bp.get('/inventory-setup')
+@require('rooms')
+def inventory_setup():return _inventory_setup_page(get_db())
+
+@bp.post('/inventory-setup/review')
+@require('rooms')
+def inventory_setup_review():
+    db=get_db();proposal,errors=_inventory_payload(db,request.form)
+    if errors:return _inventory_setup_page(db,request.form,errors,400)
+    token=secrets.token_urlsafe(24);fingerprint=hashlib.sha256(json.dumps(proposal,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+    session['inventory_review']={'token':token,'fingerprint':fingerprint}
+    return render_template('admin/inventory_review.html',proposal=proposal,token=token)
+
+@bp.post('/inventory-setup/apply')
+@require('rooms')
+def inventory_setup_apply():
+    db=get_db();proposal,errors=_inventory_payload(db,request.form)
+    review=session.get('inventory_review') or {};token=request.form.get('review_token','')
+    fingerprint=hashlib.sha256(json.dumps(proposal,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+    if request.form.get('action')=='edit':
+        session.pop('inventory_review',None)
+        return _inventory_setup_page(db,request.form,errors,400 if errors else 200)
+    if errors or not token or not hmac.compare_digest(token,review.get('token','')) or not hmac.compare_digest(fingerprint,review.get('fingerprint','')):
+        session.pop('inventory_review',None)
+        if not errors:errors=['Review token expired or configuration changed. Review the inventory again before applying.']
+        return _inventory_setup_page(db,request.form,errors,400)
+    try:
+        with tx(db):
+            for category in proposal['categories']:
+                current=db.execute('SELECT id FROM room_categories WHERE id=? AND property_id=? AND active=1',(category['category_id'],category['property_id'])).fetchone()
+                if not current or not db.execute('SELECT 1 FROM properties WHERE id=? AND active=1',(category['property_id'],)).fetchone():raise ValueError('A property or category changed after review. Review the inventory again.')
+                db.execute('UPDATE room_categories SET base_price_paise=?,max_adults=?,max_children=? WHERE id=? AND property_id=?',(category['rate_paise'],category['max_adults'],category['max_children'],category['category_id'],category['property_id']))
+                for room in category['rooms']:
+                    existing=db.execute('SELECT id,category_id FROM rooms WHERE property_id=? AND lower(number)=lower(?)',(category['property_id'],room['number'])).fetchone()
+                    if existing and existing['category_id']!=category['category_id']:raise ValueError(f"Room {room['number']} was assigned to another category after review.")
+                    if existing:db.execute("UPDATE rooms SET status='active' WHERE id=?",(existing['id'],))
+                    else:db.execute('INSERT INTO rooms(property_id,category_id,number) VALUES(?,?,?)',(category['property_id'],category['category_id'],room['number']))
+            set_setting(db,'tax_percent',proposal['tax_percent'])
+            set_setting(db,'tax_percent_confirmed','1' if proposal['tax_confirmed'] else '0')
+            B.audit(db,g.user,'inventory_setup_applied','settings','inventory',f"{len(proposal['categories'])} categories; tax {'confirmed' if proposal['tax_confirmed'] else 'pending'}")
+        session.pop('inventory_review',None)
+        flash('Inventory configuration applied. Tax is confirmed.' if proposal['tax_confirmed'] else 'Inventory configuration applied. Tax remains pending; online bookings are disabled.','ok' if proposal['tax_confirmed'] else 'error')
+        return redirect(url_for('admin.inventory_setup'))
+    except Exception as e:
+        session.pop('inventory_review',None);flash(str(e) or 'Could not apply inventory configuration. No changes were saved.','error')
+        return redirect(url_for('admin.inventory_setup'))
+
+@bp.post('/tax')
+@require('rooms')
+def tax_settings():
+    db=get_db();f=request.form
+    try:
+        confirmed=bool(f.get('confirm_tax'))
+        tax_text=(f.get('tax_percent','') or '').strip()
+        if not tax_text:
+            if confirmed:raise ValueError
+            value=''
+        else:
+            value=Decimal(tax_text)
+            if not value.is_finite() or value<0 or value>100 or value!=value.quantize(Decimal('0.01')):raise ValueError
+            value=format(value,'f')
+        set_setting(db,'tax_percent',value);set_setting(db,'tax_percent_confirmed','1' if confirmed else '0')
+        B.audit(db,g.user,'tax_settings_saved','settings','tax_percent',f"{'confirmed' if confirmed else 'unconfirmed'} {value}%")
+        flash('Tax percentage confirmed and saved.' if confirmed else 'Tax value saved as unconfirmed; online bookings remain disabled.','ok' if confirmed else 'error')
+    except (InvalidOperation,ValueError):flash('Enter a tax percentage from 0 to 100. Confirm it only after management approval.','error')
+    return redirect(url_for('admin.categories'))
 @bp.post('/pricing')
 @require('rooms')
 def pricing_add():
@@ -453,7 +607,8 @@ def settings():
             set_setting(db,'advance_percent',ap)
         except ValueError:flash('Advance percentage must be 1 to 100.','error');return redirect(url_for('admin.settings'))
         B.audit(db,g.user,'settings_saved','settings','');flash('Settings saved.','ok');return redirect(url_for('admin.settings'))
-    return render_template('admin/settings.html',props=db.execute('SELECT * FROM properties').fetchall(),adv=setting(db,'advance_percent','100'),c=current_app.config,rz=P.configured())
+    tax_percent,tax_confirmed=B.tax_configuration(db)
+    return render_template('admin/settings.html',props=db.execute('SELECT * FROM properties').fetchall(),adv=setting(db,'advance_percent','100'),c=current_app.config,rz=P.configured(),tax_percent=tax_percent,tax_confirmed=tax_confirmed)
 @bp.get('/audit')
 @require('audit')
 def audit():return render_template('admin/audit.html',logs=get_db().execute('SELECT * FROM audit_logs ORDER BY id DESC LIMIT 300').fetchall())

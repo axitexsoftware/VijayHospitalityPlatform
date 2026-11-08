@@ -79,11 +79,15 @@ def search():
         except ValueError as e:err={'rooms' if 'room' in str(e) else 'budget':str(e) or 'Enter a valid value.'}
     property_ids={room['pid'] for room in res or []}
     search_properties=[dict(p) for p in props() if not property_ids or p['id'] in property_ids]
-    return render_template('public/search.html',f=f,res=res,err=err,cats=categories,today=today().isoformat(),inventory_count=inventory_count,active_room_count=active_room_count,nights=nights,search_properties=search_properties,available_amenities=available_amenities,category_count=category_count,policy_hours=current_app.config['CANCEL_FREE_HOURS'],late_refund_percent=current_app.config['LATE_CANCEL_REFUND_PERCENT'],online_payment_ready=P.configured())
+    _,tax_configured=B.tax_configuration(db)
+    return render_template('public/search.html',f=f,res=res,err=err,cats=categories,today=today().isoformat(),inventory_count=inventory_count,active_room_count=active_room_count,room_previews=category_previews(),nights=nights,search_properties=search_properties,available_amenities=available_amenities,category_count=category_count,policy_hours=current_app.config['CANCEL_FREE_HOURS'],late_refund_percent=current_app.config['LATE_CANCEL_REFUND_PERCENT'],online_payment_ready=P.configured(),tax_configured=tax_configured)
 @bp.route('/book',methods=['GET','POST'])
 @rate_limit('book',12,600)
 def book():
     db=get_db();src=request.values;f={k:src.get(k,'') for k in('room_id','ci','co','adults','children')};errs={};vals={k:request.form.get(k,'') for k in('name','phone','email','notes')}
+    if not B.tax_configuration(db)[1]:
+        flash('Online booking is paused until management confirms the tax setting. Please enquire with the property.','error')
+        return redirect(url_for('public.search',ci=f['ci'],co=f['co'],adults=f['adults'],children=f['children']))
     try:rs=B.search(db,f['ci'],f['co'],f['adults'] or 1,f['children'] or 0);room=next((r for r in rs if str(r['id'])==f['room_id']),None)
     except B.Invalid as e:flash(str(e),'error');return redirect(url_for('public.search'))
     if not room:flash('That room is no longer available for those dates. Please search again.','error');return redirect(url_for('public.search',ci=f['ci'],co=f['co'],adults=f['adults'],children=f['children']))

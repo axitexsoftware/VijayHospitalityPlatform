@@ -5,7 +5,7 @@ from app.db import connect
 class T(Base):
     def test_search_available_and_unavailable(self):
         rs=B.search(self.db,day(10),day(12),2,0);self.assertEqual(len(rs),3)
-        self.assertEqual(rs[0]['quote']['room_total'],400000);self.assertEqual(rs[0]['quote']['tax'],48000);self.assertEqual(rs[0]['quote']['total'],448000)
+        self.assertEqual(rs[0]['quote']['room_total'],360000);self.assertEqual(rs[0]['quote']['tax'],43200);self.assertEqual(rs[0]['quote']['total'],403200)
         for r in (1,2,3):self.book(r,phone='98765432%02d'%r)
         self.assertEqual(B.search(self.db,day(10),day(12),2,0),[])
     def test_book_ac_and_non_ac(self):
@@ -41,7 +41,7 @@ class T(Base):
         self.assertEqual(len([x for x in out if x]),1);self.assertEqual(self.db.execute("SELECT COUNT(*) FROM reservations WHERE room_id=1 AND check_in=?",(day(20),)).fetchone()[0],1)
     def test_modify_cancel_and_inventory_release(self):
         r=self.book(1);self.assertEqual(len(B.search(self.db,day(10),day(12),2,0,category_id=1)),1)
-        m=B.modify(self.db,r['id'],day(10),day(13),2,0);self.assertEqual(m['nights'],3);self.assertEqual(m['total_paise'],672000)
+        m=B.modify(self.db,r['id'],day(10),day(13),2,0);self.assertEqual(m['nights'],3);self.assertEqual(m['total_paise'],604800)
         with self.assertRaises(B.Unavailable):self.book(1,ci=12,co=14,name='X Y',phone='9111111111')
         res,due=B.cancel(self.db,r['id'],'plans changed',by_customer=True);self.assertEqual(res['status'],'cancelled')
         self.assertEqual(len(B.search(self.db,day(10),day(13),2,0,category_id=1)),2)

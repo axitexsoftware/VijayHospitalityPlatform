@@ -148,10 +148,59 @@ class Web(Base):
         body=dict(room_id=1,check_in=day(10),check_out=day(12),adults=2,name='Mina Das',phone='9811111111');h={'X-CSRF-Token':t}
         self.assertEqual(c.post('/api/bookings',json=body,headers=h).status_code,201);body['name']='Other Guy';body['phone']='9822222222'
         self.assertEqual(c.post('/api/bookings',json=body,headers=h).status_code,409);self.assertEqual(c.post('/api/bookings',json=body).status_code,400)
+    def test_tax_requires_admin_confirmation_and_updates_quotes(self):
+        from app.services import booking as B,ai
+        self.app.config['TAX_PERCENT_CONFIGURED']=False
+        self.db.execute("DELETE FROM settings WHERE key IN('tax_percent','tax_percent_confirmed')")
+        self.assertEqual(B.tax_configuration(self.db),(0.0,False))
+        self.assertEqual(self.db.execute("SELECT value FROM settings WHERE key='test_rate_label'").fetchone()[0],'TEST ONLY - NOT APPROVED')
+        self.assertEqual(self.db.execute('SELECT base_price_paise FROM room_categories WHERE id=1').fetchone()[0],180000)
+        self.assertEqual(self.db.execute('SELECT base_price_paise FROM room_categories WHERE id=2').fetchone()[0],90000)
+        self.assertIn('Tax has not been confirmed in Admin',ai.system_prompt(self.db))
+        client=self.app.test_client();dates={'ci':day(10),'co':day(12),'adults':2,'children':0,'rooms':1}
+        page=client.get('/search',query_string=dates).get_data(as_text=True)
+        self.assertIn('Tax pending Admin confirmation',page);self.assertIn('Enquire to confirm final price',page);self.assertNotIn('Book this room ·',page)
+        blocked_booking=client.get('/book',query_string={'room_id':1,'ci':day(10),'co':day(12),'adults':2,'children':0})
+        self.assertEqual(blocked_booking.status_code,302);self.assertIn('/search?',blocked_booking.headers['Location'])
+        availability=client.get('/api/availability',query_string={'check_in':day(10),'check_out':day(12),'adults':2}).get_json()
+        self.assertFalse(availability['can_accommodate']);self.assertEqual(availability['inventory_status'],'tax_unconfirmed')
+        pending_quote=client.get('/api/price-quote',query_string={'category_id':1,'check_in':day(10),'check_out':day(12)}).get_json()
+        self.assertFalse(pending_quote['tax_configured']);self.assertEqual(pending_quote['tax_paise'],0);self.assertEqual(pending_quote['total_paise'],pending_quote['room_total_paise'])
+        with self.assertRaises(B.Invalid):B.create_reservation(self.db,1,day(10),day(12),2,0,'Tax Pending Guest','9876543211',None)
+        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM reservations').fetchone()[0],0)
+        admin,_=self.login();token=self.csrf(admin,'/admin/categories')
+        self.assertEqual(admin.get('/admin/categories').status_code,200)
+        saved=admin.post('/admin/tax',data={'csrf_token':token,'tax_percent':'7.5','confirm_tax':'1'})
+        self.assertEqual(saved.status_code,302);self.assertEqual(B.tax_configuration(self.db),(7.5,True))
+        self.assertIn('7.5% confirmed',admin.get('/admin/settings').get_data(as_text=True))
+        quote=admin.get('/api/price-quote',query_string={'category_id':1,'check_in':day(10),'check_out':day(12)}).get_json()
+        self.assertTrue(quote['tax_configured']);self.assertEqual(quote['tax_paise'],27000);self.assertEqual(quote['total_paise'],387000)
+        reservation=B.create_reservation(self.db,1,day(10),day(12),2,0,'Tax Confirmed Guest','9876543212',None)
+        self.assertEqual(reservation['tax_paise'],27000);self.assertEqual(reservation['total_paise'],387000)
+        pending=admin.post('/admin/tax',data={'csrf_token':token,'tax_percent':'','confirm_tax':''})
+        self.assertEqual(pending.status_code,302);self.assertEqual(B.tax_configuration(self.db),(0.0,False))
+        self.assertEqual(B.quote(self.db,dict(self.db.execute(B.ROOM_SQL+' AND r.id=?',(1,)).fetchone()),day(10),day(12))['total'],360000)
+    def test_inventory_setup_requires_review_and_applies_only_reviewed_data(self):
+        from app.services import booking as B
+        self.db.execute("DELETE FROM settings WHERE key IN('tax_percent','tax_percent_confirmed')")
+        admin,_=self.login();token=self.csrf(admin,'/admin/inventory-setup')
+        form={'csrf_token':token,'category_id':['1','2'],'rate_1':'1800','max_adults_1':'2','max_children_1':'1','rooms_1':'101\n102\n104','rate_2':'900','max_adults_2':'2','max_children_2':'1','rooms_2':'201','tax_percent':'','confirm_tax':''}
+        duplicate=admin.post('/admin/inventory-setup/review',data=form|{'rooms_2':'101'})
+        self.assertEqual(duplicate.status_code,400);self.assertEqual(self.db.execute('SELECT COUNT(*) FROM rooms').fetchone()[0],3)
+        review=admin.post('/admin/inventory-setup/review',data=form);self.assertEqual(review.status_code,200);page=review.get_data(as_text=True)
+        self.assertIn('PENDING',page);self.assertIn('Nothing has been written to the database yet.',page)
+        self.assertEqual(self.db.execute('SELECT base_price_paise FROM room_categories WHERE id=1').fetchone()[0],180000)
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM rooms WHERE number='104'").fetchone()[0],0)
+        review_token=re.search(r'name="review_token" value="([^"]+)"',page).group(1)
+        applied=admin.post('/admin/inventory-setup/apply',data=form|{'review_token':review_token,'action':'apply'})
+        self.assertEqual(applied.status_code,302);self.assertEqual(self.db.execute("SELECT category_id FROM rooms WHERE number='104'").fetchone()[0],1)
+        self.assertEqual(self.db.execute('SELECT base_price_paise FROM room_categories WHERE id=2').fetchone()[0],90000)
+        self.assertEqual(B.tax_configuration(self.db),(0.0,False))
+        with self.assertRaises(B.Invalid):B.create_reservation(self.db,1,day(10),day(12),2,0,'Pending Tax Guest','9888888801',None)
     def test_availability_explains_unpublished_inventory(self):
         self.db.execute("UPDATE rooms SET status='inactive'");client=self.app.test_client();dates={'check_in':day(10),'check_out':day(12),'adults':2}
         api=client.get('/api/availability',query_string=dates).get_json();self.assertEqual(api['count'],0);self.assertEqual(api['inventory_status'],'not_configured');self.assertIn('configured yet',api['message'])
-        page=client.get('/search',query_string={'ci':day(10),'co':day(12),'adults':2}).get_data(as_text=True);self.assertIn('Online room inventory is not published yet',page);self.assertNotIn('No rooms available for those dates',page)
+        page=client.get('/search',query_string={'ci':day(10),'co':day(12),'adults':2}).get_data(as_text=True);self.assertIn('Room options require a quick enquiry',page);self.assertIn('Rates and date availability on request',page);self.assertNotIn('No rooms available for those dates',page)
     def test_search_explains_active_rooms_without_published_rates(self):
         self.db.execute('UPDATE room_categories SET base_price_paise=0')
         client=self.app.test_client();page=client.get('/search',query_string={'ci':day(10),'co':day(12),'adults':2}).get_data(as_text=True)

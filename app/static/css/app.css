@@ -56,6 +56,47 @@ body.adm{background:#f4f5f2;color:#292d2a}.shell{grid-template-columns:244px min
 /* Apply the shared hospitality palette to legacy admin surfaces. */
 body.adm{background:var(--color-warm-ivory);color:var(--color-espresso)}
 .side-nav{background:var(--color-royal-wine);color:var(--color-champagne)}
+.inventory-safety-note{display:grid;gap:4px;border-left:3px solid var(--color-antique-gold);background:var(--color-warm-ivory)}
+.inventory-safety-note strong{font-size:.84rem}
+.inventory-safety-note span{color:var(--color-muted-text);font-size:.78rem}
+.inventory-setup-form{display:grid;gap:12px}
+.inventory-category-card{margin:0!important}
+.inventory-category-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px}
+.inventory-category-heading h2{margin:0!important;font-size:1.12rem!important}
+.inventory-category-heading .eyebrow{margin-bottom:4px}
+.inventory-category-type{padding:5px 8px;border:1px solid var(--color-border);border-radius:4px;background:#fff;font-size:.7rem;font-weight:700}
+.inventory-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.inventory-fields label{display:grid;align-content:start;gap:5px;color:var(--color-espresso);font-size:.78rem;font-weight:700}
+.inventory-fields label small{color:var(--color-muted-text);font-size:.68rem;font-weight:400}
+.inventory-fields .inventory-room-numbers{grid-column:1/-1}
+.inventory-fields textarea{min-height:96px;font:400 .84rem/1.5 var(--sans)}
+.inventory-existing-rooms{margin:14px 0 0;padding:9px 12px;border:0;border-top:1px solid var(--color-border);border-radius:0;background:transparent}
+.inventory-existing-rooms>summary{padding:5px 0;color:var(--color-muted-text);font-size:.73rem}
+.inventory-existing-rooms ul{display:flex;flex-wrap:wrap;gap:6px 18px;margin:6px 0;padding-left:18px;font-size:.72rem}
+.inventory-tax-card header{margin-bottom:8px}
+.inventory-tax-card h2{margin:0!important}
+.inventory-tax-card>p{max-width:80ch;color:var(--color-muted-text);font-size:.8rem}
+.inventory-tax-fields{display:flex;flex-wrap:wrap;align-items:end;gap:16px}
+.inventory-tax-fields>label:first-child{display:grid;gap:5px;font-size:.78rem;font-weight:700}
+.inventory-tax-fields>label:first-child input{width:170px}
+.tax-confirm-label,.check-label{display:flex!important;align-items:center;gap:7px;font-size:.75rem!important;font-weight:600!important}
+.tax-config-status{margin:12px 0 0;padding:8px 10px;border-radius:4px;font-size:.74rem}
+.tax-config-status.pending{background:var(--color-warning-bg);color:var(--color-warning-text)}
+.tax-config-status.confirmed{background:var(--color-success-bg);color:var(--color-success-text)}
+.inventory-setup-actions{display:flex;justify-content:flex-end}
+.inventory-review-tax{border-left:3px solid var(--color-warning-text)}
+.inventory-review-tax h2{margin:2px 0 5px!important;font-size:1.15rem!important}
+.inventory-review-tax p{margin:0;color:var(--color-muted-text);font-size:.78rem}
+.inventory-review-category{margin-bottom:12px!important}
+.inventory-review-category header{margin-bottom:12px}
+.inventory-review-category h2{margin:0!important;font-size:1.05rem!important}
+.inventory-review-facts{display:flex;flex-wrap:wrap;gap:8px 24px;margin:0 0 12px}
+.inventory-review-facts div{display:grid;gap:3px}
+.inventory-review-facts dt{color:var(--color-muted-text);font-size:.69rem}
+.inventory-review-facts dd{margin:0;font-size:.82rem;font-weight:700}
+.inventory-review-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+@media(max-width:760px){.inventory-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.inventory-tax-fields{align-items:flex-start;flex-direction:column}.inventory-review-actions{flex-wrap:wrap}}
+@media(max-width:520px){.inventory-fields{grid-template-columns:1fr}.inventory-fields .inventory-room-numbers{grid-column:auto}.inventory-review-actions{flex-direction:column}.inventory-review-actions .btn{width:100%}}
 .side-nav .logo,.side-nav .logo small{color:var(--color-pure-white)}
 .side-nav .logo i,.who-mark{background:var(--color-antique-gold);color:var(--color-espresso)}
 .nav-group-title,.side-nav .who,.who-name small{color:var(--color-champagne)}

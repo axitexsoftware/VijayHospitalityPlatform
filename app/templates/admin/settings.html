@@ -1,4 +1,34 @@
-{% extends 'admin/base.html' %}{% block title %}Settings{% endblock %}
-{% block content %}<h1>Settings</h1><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% for p in props %}<div class="card"><h2>{{p.name}} <small class="muted">({{p.kind}})</small></h2><div class="row"><label>Name<input name="name_{{p.id}}" value="{{p.name}}"></label><label>Address (verify before publishing)<input name="address_{{p.id}}" value="{{p.address or ''}}" size="46"></label><label>Phone<input name="phone_{{p.id}}" value="{{p.phone or ''}}"></label><label>Email<input name="email_{{p.id}}" value="{{p.email or ''}}"></label><label>WhatsApp (91XXXXXXXXXX)<input name="whatsapp_{{p.id}}" value="{{p.whatsapp or ''}}"></label><label>Google Maps link<input name="map_url_{{p.id}}" value="{{p.map_url or ''}}" size="30"></label><label>Description<input name="description_{{p.id}}" value="{{p.description or ''}}" size="40"></label><label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" name="active_{{p.id}}" {{'checked' if p.active}}> Published</label></div></div>{% endfor %}
-<div class="card"><h2>Payments</h2><label>Advance required for online payment (% of balance)<input name="advance_percent" type="number" min="1" max="100" value="{{adv}}" style="width:90px"></label></div><button class="btn">Save settings</button></form>
-<div class="card" style="margin-top:16px"><h2>Integration status</h2><p>Razorpay: <span class="badge {{ 'sent' if rz else 'skipped' }}">{{ 'configured' if rz else 'not configured' }}</span> · AI receptionist: <span class="badge {{ 'sent' if c.LLM_API_KEY else 'skipped' }}">{{ 'configured' if c.LLM_API_KEY else 'not configured' }}</span> · Email: <span class="badge {{ 'sent' if c.SMTP_HOST else 'skipped' }}">{{ 'configured' if c.SMTP_HOST else 'not configured' }}</span> · WhatsApp: <span class="badge {{ 'sent' if c.WHATSAPP_TOKEN else 'skipped' }}">{{ 'configured' if c.WHATSAPP_TOKEN else 'not configured' }}</span> · SMS: <span class="badge {{ 'sent' if c.SMS_WEBHOOK_URL else 'skipped' }}">{{ 'configured' if c.SMS_WEBHOOK_URL else 'not configured' }}</span></p><p class="muted">Tax {{c.TAX_PERCENT}}%, hold {{c.HOLD_MINUTES}} minutes, free cancellation {{c.CANCEL_FREE_HOURS}} hours. These are set in the environment file.</p></div>{% endblock %}
+{% extends 'admin/base.html' %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+<form method="post">
+  <input type="hidden" name="csrf_token" value="{{csrf_token()}}">
+  {% for p in props %}
+  <section class="card">
+    <h2>{{p.name}} <small class="muted">({{p.kind}})</small></h2>
+    <div class="row">
+      <label>Name<input name="name_{{p.id}}" value="{{p.name}}"></label>
+      <label>Address (verify before publishing)<input name="address_{{p.id}}" value="{{p.address or ''}}" size="46"></label>
+      <label>Phone<input name="phone_{{p.id}}" value="{{p.phone or ''}}"></label>
+      <label>Email<input name="email_{{p.id}}" value="{{p.email or ''}}"></label>
+      <label>WhatsApp (91XXXXXXXXXX)<input name="whatsapp_{{p.id}}" value="{{p.whatsapp or ''}}"></label>
+      <label>Google Maps link<input name="map_url_{{p.id}}" value="{{p.map_url or ''}}" size="30"></label>
+      <label>Description<input name="description_{{p.id}}" value="{{p.description or ''}}" size="40"></label>
+      <label class="check-label"><input type="checkbox" name="active_{{p.id}}" {{'checked' if p.active}}> Published</label>
+    </div>
+  </section>
+  {% endfor %}
+  <section class="card">
+    <h2>Payments</h2>
+    <label>Advance required for online payment (% of balance)<input name="advance_percent" type="number" min="1" max="100" value="{{adv}}" style="width:90px"></label>
+  </section>
+  <button class="btn">Save settings</button>
+</form>
+<section class="card" style="margin-top:16px">
+  <h2>Integration status</h2>
+  <p>Razorpay: <span class="badge {{'sent' if rz else 'skipped'}}">{{'configured' if rz else 'not configured'}}</span> · AI receptionist: <span class="badge {{'sent' if c.LLM_API_KEY else 'skipped'}}">{{'configured' if c.LLM_API_KEY else 'not configured'}}</span> · Email: <span class="badge {{'sent' if c.SMTP_HOST else 'skipped'}}">{{'configured' if c.SMTP_HOST else 'not configured'}}</span> · WhatsApp: <span class="badge {{'sent' if c.WHATSAPP_TOKEN else 'skipped'}}">{{'configured' if c.WHATSAPP_TOKEN else 'not configured'}}</span> · SMS: <span class="badge {{'sent' if c.SMS_WEBHOOK_URL else 'skipped'}}">{{'configured' if c.SMS_WEBHOOK_URL else 'not configured'}}</span></p>
+  <p class="muted">Tax: {% if tax_confirmed %}{{tax_percent}}% confirmed{% else %}pending Admin confirmation{% endif %} · hold {{c.HOLD_MINUTES}} minutes · free cancellation {{c.CANCEL_FREE_HOURS}} hours.</p>
+  <p class="muted">Configure and confirm tax under Admin → Categories and rates. A tax rate is not assumed when the setting is pending.</p>
+</section>
+{% endblock %}
