@@ -103,12 +103,12 @@ def nightly(db, category_id, day, base=None, nights=1, check_in=None):
     category_id = int(category_id)
     if base is None:
         row = db.execute(
-            'SELECT base_price_paise FROM room_categories WHERE id=?', (category_id,)
+            'SELECT nightly_rate_paise FROM room_categories WHERE id=?', (category_id,)
         ).fetchone()
         if not row:
             raise ValueError('Choose a valid room category.')
         seasonal = db.execute(
-            'SELECT price_paise FROM pricing_rules WHERE category_id=? AND start_date<=? AND end_date>=? ORDER BY id DESC LIMIT 1',
+            'SELECT price_paise FROM pricing_rules WHERE category_id=? AND approved=1 AND start_date<=? AND end_date>=? ORDER BY id DESC LIMIT 1',
             (category_id, day, day),
         ).fetchone()
         base = seasonal[0] if seasonal else row[0]

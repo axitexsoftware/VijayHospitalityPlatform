@@ -11,10 +11,18 @@ class Base(unittest.TestCase):
         db.execute("INSERT INTO settings(key,value) VALUES('test_rate_label','TEST ONLY - NOT APPROVED')")
         db.execute("INSERT INTO settings(key,value) VALUES('tax_percent','12')")
         db.execute("INSERT INTO settings(key,value) VALUES('tax_percent_confirmed','1')")
+        db.execute("INSERT INTO settings(key,value) VALUES('room_rates_confirmed','1')")
+        db.execute("INSERT INTO settings(key,value) VALUES('room_occupancy_confirmed','1')")
+        db.execute("INSERT INTO settings(key,value) VALUES('room_inventory_confirmed','1')")
+        db.execute("INSERT INTO settings(key,value) VALUES('room_photos_confirmed','1')")
         db.execute("INSERT INTO properties(slug,name,kind,address) VALUES('u','Vijay Utsav','Hotel','Manpur, Gaya')")
         db.execute("INSERT INTO room_categories(property_id,name,ac,base_price_paise,max_adults,max_children) VALUES(1,'AC Room',1,180000,2,1)")
         db.execute("INSERT INTO room_categories(property_id,name,ac,base_price_paise,max_adults,max_children) VALUES(1,'Non-AC Room',0,90000,2,1)")
         for n,c in [('101',1),('102',1),('201',2)]:db.execute('INSERT INTO rooms(property_id,category_id,number) VALUES(1,?,?)',(c,n))
+        db.execute("""UPDATE room_categories SET room_type=CASE WHEN ac=1 THEN 'AC room' ELSE 'Non-AC room' END,
+            nightly_rate_paise=base_price_paise,max_adults_approved=max_adults,max_children_approved=max_children,max_occupancy=max_adults+max_children,
+            details_status='approved',inventory_status='approved',occupancy_status='approved',rates_status='approved',tax_status='approved',
+            photos_status='approved',publication_status='published'""")
         for e,r in [('owner@t.in','owner'),('rec@t.in','receptionist')]:db.execute('INSERT INTO users(email,name,password_hash,role) VALUES(?,?,?,?)',(e,r,hash_password('Passw0rd!!x'),r))
         self.ctx=self.app.app_context();self.ctx.push()
     def tearDown(self):

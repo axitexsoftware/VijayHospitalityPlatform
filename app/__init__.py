@@ -7,6 +7,7 @@ class HospitalityRequest(Request):
     @property
     def max_content_length(self):
         if self.path=='/admin/media/upload':return 65*1024*1024
+        if self.path.startswith('/admin/rooms/') and self.path.endswith('/panorama'):return 9*1024*1024
         return current_app.config.get('MAX_CONTENT_LENGTH')
 def create_app(**over):
     app=Flask(__name__,instance_relative_config=False);app.request_class=HospitalityRequest;app.config.update(cfgmod.load(**over));app.config['CSRF_EXEMPT']={'api.payment_webhook'}

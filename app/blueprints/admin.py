@@ -48,9 +48,30 @@ def rooms():
 def _money(v):
     v=(v or '').strip()
     if not v:return None
-    x=round(float(v)*100)
-    if x<=0:raise ValueError
-    return x
+    amount=Decimal(v)
+    if not amount.is_finite() or amount<=0 or amount>Decimal('10000000') or amount!=amount.quantize(Decimal('0.01')):raise ValueError
+    return int(amount*100)
+def _category_unpublish(db,category_id,fields):
+    allowed={'details':'details_status','inventory':'inventory_status','occupancy':'occupancy_status','rates':'rates_status','tax':'tax_status'}
+    columns=[allowed[field] for field in fields if field in allowed]
+    if not columns:return
+    values=','.join(f"{column}='pending'" for column in columns)
+    db.execute(f"UPDATE room_categories SET {values},publication_status='unpublished',updated_at=CURRENT_TIMESTAMP WHERE id=?",(category_id,))
+def _unpublish_room_data(db,rates=False,occupancy=False,rooms=False,photos=False,tax=False):
+    for changed,key in ((rates,'room_rates_confirmed'),(occupancy,'room_occupancy_confirmed'),(rooms,'room_inventory_confirmed'),(photos,'room_photos_confirmed')):
+        if changed:set_setting(db,key,'0')
+    columns=[]
+    if rates:columns.append("rates_status='pending'")
+    if occupancy:columns.append("occupancy_status='pending'")
+    if rooms:columns.append("inventory_status='pending'")
+    if photos:columns.append("photos_status='pending'")
+    if tax:columns.append("tax_status='pending'")
+    if columns:
+        if tax and not rates and not occupancy and not rooms and not photos:
+            db.execute("UPDATE room_categories SET "+','.join(columns)+",publication_status='unpublished',updated_at=CURRENT_TIMESTAMP WHERE tax_percent IS NULL")
+        else:
+            db.execute("UPDATE room_categories SET "+','.join(columns)+",publication_status='unpublished',updated_at=CURRENT_TIMESTAMP")
+    if rates:db.execute('UPDATE pricing_rules SET approved=0')
 @bp.post('/rooms/new')
 @require('rooms')
 def room_new():
@@ -59,6 +80,7 @@ def room_new():
         cat=db.execute('SELECT * FROM room_categories WHERE id=?',(int(f['category_id']),)).fetchone();num=f['number'].strip()
         if not num or not cat:raise ValueError
         rid=db.execute('INSERT INTO rooms(property_id,category_id,number,floor,price_override_paise,description) VALUES(?,?,?,?,?,?)',(cat['property_id'],cat['id'],num[:10],f.get('floor','')[:10],_money(f.get('price')),f.get('description','')[:500])).lastrowid
+        _category_unpublish(db,cat['id'],{'inventory'})
         B.audit(db,g.user,'room_added','room',rid,num);flash('Room added.','ok');return redirect(url_for('admin.room_edit',rid=rid))
     except Exception as e:flash('Could not add the room. Check the number is unique for that property and the price is valid.','error')
     return back('admin.rooms')
@@ -70,17 +92,20 @@ def room_edit(rid):
     if request.method=='POST':
         f=request.form
         try:
+            previous_category=int(r['category_id'])
             with tx(db):
                 db.execute('UPDATE rooms SET category_id=?,number=?,floor=?,price_override_paise=?,description=?,status=? WHERE id=?',(int(f['category_id']),f['number'].strip()[:10],f.get('floor','')[:10],_money(f.get('price')),f.get('description','')[:500],'active' if f.get('status')=='active' else 'inactive',rid))
                 db.execute('DELETE FROM room_amenities WHERE room_id=?',(rid,))
                 for a in {x.strip()[:40] for x in f.get('amenities','').split(',') if x.strip()}:
                     db.execute('INSERT OR IGNORE INTO amenities(name) VALUES(?)',(a,));db.execute('INSERT INTO room_amenities SELECT ?,id FROM amenities WHERE name=?',(rid,a))
+                _category_unpublish(db,previous_category,{'inventory'})
+                if int(f['category_id'])!=previous_category:_category_unpublish(db,int(f['category_id']),{'inventory'})
                 B.audit(db,g.user,'room_updated','room',rid)
             flash('Room saved.','ok')
         except Exception:flash('Could not save. Check the room number is unique and the price is valid.','error')
         return redirect(url_for('admin.room_edit',rid=rid))
     nights=db.execute("SELECT n.night,n.reason FROM room_nights n WHERE n.room_id=? AND n.reservation_id IS NULL AND n.night>=? ORDER BY n.night",(rid,today().isoformat())).fetchall()
-    return render_template('admin/room_edit.html',r=r,cats=db.execute('SELECT * FROM room_categories WHERE property_id=?',(r['property_id'],)).fetchall(),amen=', '.join(B.amenities(db,rid)),imgs=db.execute('SELECT * FROM room_images WHERE room_id=? ORDER BY sort,id',(rid,)).fetchall(),blocks=nights)
+    return render_template('admin/room_edit.html',r=r,cats=db.execute('SELECT * FROM room_categories WHERE property_id=?',(r['property_id'],)).fetchall(),amen=', '.join(B.amenities(db,rid)),imgs=db.execute('SELECT * FROM room_images WHERE room_id=? ORDER BY sort,id',(rid,)).fetchall(),panorama=db.execute('SELECT path,alt FROM room_panorama WHERE room_id=?',(rid,)).fetchone(),blocks=nights)
 @bp.post('/rooms/<int:rid>/image')
 @require('rooms')
 def room_image(rid):
@@ -92,7 +117,7 @@ def room_image(rid):
         im=Image.open(io.BytesIO(raw));im.verify();im=Image.open(io.BytesIO(raw))
         if im.format not in('JPEG','PNG','WEBP'):raise ValueError('Use a JPEG, PNG or WebP image.')
         im=im.convert('RGB');im.thumbnail((1600,1600));name=f'{secrets.token_hex(8)}.jpg';im.save(os.path.join(current_app.config['UPLOAD_DIR'],name),'JPEG',quality=82,optimize=True)
-        db.execute('INSERT INTO room_images(room_id,path,alt,sort) VALUES(?,?,?,?)',(rid,'uploads/'+name,request.form.get('alt','')[:150],int(db.execute('SELECT COALESCE(MAX(sort),0)+1 FROM room_images WHERE room_id=?',(rid,)).fetchone()[0])));flash('Photo uploaded.','ok')
+        db.execute('INSERT INTO room_images(room_id,path,alt,sort) VALUES(?,?,?,?)',(rid,'uploads/'+name,request.form.get('alt','')[:150],int(db.execute('SELECT COALESCE(MAX(sort),0)+1 FROM room_images WHERE room_id=?',(rid,)).fetchone()[0])));db.execute("UPDATE room_categories SET photos_status='pending',updated_at=CURRENT_TIMESTAMP WHERE id=(SELECT category_id FROM rooms WHERE id=?)",(rid,));flash('Photo uploaded. It will remain hidden until room photos are approved.','ok')
     except Exception as e:flash(str(e) if isinstance(e,ValueError) else 'That file is not a valid image.','error')
     return back('admin.rooms')
 @bp.post('/rooms/<int:rid>/image/<int:iid>/delete')
@@ -101,8 +126,41 @@ def room_image_delete(rid,iid):
     db=get_db();r=db.execute('SELECT path FROM room_images WHERE id=? AND room_id=?',(iid,rid)).fetchone()
     if r:
         db.execute('DELETE FROM room_images WHERE id=?',(iid,))
+        db.execute("UPDATE room_categories SET photos_status='pending',updated_at=CURRENT_TIMESTAMP WHERE id=(SELECT category_id FROM rooms WHERE id=?)",(rid,))
         try:os.remove(os.path.join(current_app.config['UPLOAD_DIR'],os.path.basename(r[0])))
         except OSError:pass
+    return back('admin.rooms')
+@bp.post('/rooms/<int:rid>/panorama')
+@require('rooms')
+def room_panorama_upload(rid):
+    db=get_db();upload=request.files.get('panorama')
+    if not db.execute('SELECT 1 FROM rooms WHERE id=?',(rid,)).fetchone():abort(404)
+    saved=None
+    try:
+        saved=M.save_panorama_upload(upload,current_app.config['UPLOAD_DIR'])
+        alt=(request.form.get('alt') or '360-degree room panorama')[:150]
+        previous=db.execute('SELECT path FROM room_panorama WHERE room_id=?',(rid,)).fetchone()
+        committed=False
+        try:
+            with tx(db):
+                db.execute('INSERT INTO room_panorama(room_id,path,alt) VALUES(?,?,?) ON CONFLICT(room_id) DO UPDATE SET path=excluded.path,alt=excluded.alt,created_at=CURRENT_TIMESTAMP',(rid,saved['path'],alt))
+                db.execute("UPDATE room_categories SET photos_status='pending',updated_at=CURRENT_TIMESTAMP WHERE id=(SELECT category_id FROM rooms WHERE id=?)",(rid,))
+            committed=True
+        finally:
+            if not committed:M.delete_upload(saved['path'],current_app.config['UPLOAD_DIR'])
+        if previous:M.delete_upload(previous['path'],current_app.config['UPLOAD_DIR'])
+        flash('Panorama uploaded. It will appear on the public room page after room photos are approved.','ok')
+    except (OSError,ValueError,M.MediaError) as e:
+        flash(str(e) if isinstance(e,ValueError) else 'The panorama could not be processed.','error')
+    return back('admin.rooms')
+@bp.post('/rooms/<int:rid>/panorama/delete')
+@require('rooms')
+def room_panorama_delete(rid):
+    db=get_db();row=db.execute('SELECT path FROM room_panorama WHERE room_id=?',(rid,)).fetchone()
+    if row:
+        db.execute('DELETE FROM room_panorama WHERE room_id=?',(rid,))
+        db.execute("UPDATE room_categories SET photos_status='pending',updated_at=CURRENT_TIMESTAMP WHERE id=(SELECT category_id FROM rooms WHERE id=?)",(rid,))
+        M.delete_upload(row['path'],current_app.config['UPLOAD_DIR'])
     return back('admin.rooms')
 @bp.post('/rooms/<int:rid>/block')
 @require('rooms')
@@ -118,30 +176,103 @@ def categories():
     if request.method=='POST':
         f=request.form
         try:
-            args=(f['name'].strip()[:40],1 if f.get('ac') else 0,f.get('description','')[:400],_money(f.get('price')) or 0,int(f.get('max_adults',2)),int(f.get('max_children',1)))
-            if f.get('id'):db.execute('UPDATE room_categories SET name=?,ac=?,description=?,base_price_paise=?,max_adults=?,max_children=?,active=? WHERE id=?',args+(1 if f.get('active') else 0,int(f['id'])))
-            else:db.execute('INSERT INTO room_categories(name,ac,description,base_price_paise,max_adults,max_children,property_id) VALUES(?,?,?,?,?,?,?)',args+(int(f['property_id']),))
-            B.audit(db,g.user,'category_saved','category',f.get('id',''),f['name']);flash('Category saved.','ok')
-        except Exception:flash('Could not save the category. Check the name is unique for the property and numbers are valid.','error')
+            name=' '.join(f.get('name','').split())[:40]
+            room_type=' '.join(f.get('room_type','').split())[:40] or None
+            if not name:raise ValueError('Enter a category display name.')
+            rate=_money(f.get('price'))
+            adults=int(f['max_adults']) if f.get('max_adults','').strip() else None
+            children=int(f['max_children']) if f.get('max_children','').strip() else None
+            total=int(f['max_occupancy']) if f.get('max_occupancy','').strip() else None
+            tax_text=(f.get('tax_percent','') or '').strip()
+            tax=Decimal(tax_text) if tax_text else None
+            if tax is not None and (not tax.is_finite() or tax<0 or tax>100 or tax!=tax.quantize(Decimal('0.01'))):raise ValueError('Tax must be from 0 to 100 percent, or left blank to inherit the approved property tax.')
+            if adults is not None and not 1<=adults<=12:raise ValueError('Maximum adults must be from 1 to 12, or left pending.')
+            if children is not None and not 0<=children<=12:raise ValueError('Maximum children must be from 0 to 12, or left pending.')
+            if total is not None and not 1<=total<=24:raise ValueError('Maximum total occupancy must be from 1 to 24, or left pending.')
+            if total is not None and adults is not None and total<adults:raise ValueError('Maximum total occupancy cannot be lower than maximum adults.')
+            args=(name,room_type,1 if f.get('ac') else 0,f.get('description','')[:400],rate,adults,children,total,float(tax) if tax is not None else None)
+            if f.get('id'):
+                cid=int(f['id'])
+                with tx(db):
+                    db.execute("""UPDATE room_categories SET name=?,room_type=?,ac=?,description=?,nightly_rate_paise=?,
+                        max_adults_approved=?,max_children_approved=?,max_occupancy=?,tax_percent=?,
+                        base_price_paise=COALESCE(?,0),max_adults=COALESCE(?,2),max_children=COALESCE(?,1),
+                        active=?,details_status='pending',inventory_status='pending',occupancy_status='pending',
+                        rates_status='pending',tax_status='pending',publication_status='unpublished',updated_at=CURRENT_TIMESTAMP
+                        WHERE id=?""",args+(rate or 0,adults or 2,children if children is not None else 1,1 if f.get('active') else 0,cid))
+                    B.audit(db,g.user,'category_saved','category',cid,name)
+            else:
+                property_id=int(f.get('property_id',''))
+                with tx(db):
+                    cid=db.execute("""INSERT INTO room_categories(property_id,name,room_type,ac,description,nightly_rate_paise,
+                        max_adults_approved,max_children_approved,max_occupancy,tax_percent,base_price_paise,max_adults,max_children,created_at,updated_at)
+                        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)""",(property_id,name,room_type,args[2],args[3],rate,adults,children,total,args[8],rate or 0,adults or 2,children if children is not None else 1)).lastrowid
+                    B.audit(db,g.user,'category_created','category',cid,name)
+            flash('Category saved. Details, rates, occupancy, tax and inventory remain unpublished until separately approved.','ok')
+        except (ValueError,TypeError,InvalidOperation) as e:
+            flash(str(e) or 'Could not save the category. Check the supplied values.','error')
+        except Exception:
+            flash('Could not save the category. Check that the property/category is valid and the name is unique.','error')
         return redirect(url_for('admin.categories'))
     tax_percent=setting(db,'tax_percent')
     tax_confirmed=B.tax_configuration(db)[1]
     if tax_percent is None and current_app.config.get('TAX_PERCENT_CONFIGURED'):
         tax_percent=f"{current_app.config['TAX_PERCENT']:.2f}"
-    return render_template('admin/categories.html',cats=db.execute('SELECT c.*,p.name pname FROM room_categories c JOIN properties p ON p.id=c.property_id ORDER BY p.id,c.name').fetchall(),props=db.execute('SELECT * FROM properties').fetchall(),rules=db.execute('SELECT x.*,c.name cat FROM pricing_rules x JOIN room_categories c ON c.id=x.category_id ORDER BY x.start_date').fetchall(),tax_percent=tax_percent or '',tax_confirmed=tax_confirmed)
+    cats=db.execute("""SELECT c.*,p.name pname,(SELECT COUNT(*) FROM rooms r WHERE r.category_id=c.id AND r.status='active') inventory_count,
+        (SELECT COUNT(*) FROM room_images i JOIN rooms r ON r.id=i.room_id WHERE r.category_id=c.id) photo_count
+        FROM room_categories c JOIN properties p ON p.id=c.property_id ORDER BY p.id,c.name""").fetchall()
+    return render_template('admin/categories.html',cats=cats,props=db.execute('SELECT * FROM properties').fetchall(),rules=db.execute('SELECT x.*,c.name cat FROM pricing_rules x JOIN room_categories c ON c.id=x.category_id ORDER BY x.start_date').fetchall(),tax_percent=tax_percent or '',tax_confirmed=tax_confirmed)
+
+@bp.post('/categories/<int:category_id>/approval')
+@require('rooms')
+def category_approval(category_id):
+    db=get_db();f=request.form
+    category=db.execute('SELECT * FROM room_categories WHERE id=?',(category_id,)).fetchone()
+    if not category:abort(404)
+    requested={key:'approved' if f.get('approve_'+key)=='1' else 'pending' for key in ('details','inventory','occupancy','rates','tax','photos')}
+    try:
+        inventory=db.execute("SELECT COUNT(*) FROM rooms WHERE category_id=? AND property_id=? AND status='active'",(category_id,category['property_id'])).fetchone()[0]
+        photos=db.execute("SELECT COUNT(*) FROM room_images i JOIN rooms r ON r.id=i.room_id WHERE r.category_id=?",(category_id,)).fetchone()[0]
+        if f.get('publish')=='1' and (not category['active'] or not db.execute('SELECT 1 FROM properties WHERE id=? AND active=1',(category['property_id'],)).fetchone()):raise ValueError('Activate the category and its property before publication.')
+        if requested['details']=='approved' and not category['room_type']:raise ValueError('Add the room type before approving category details.')
+        if requested['inventory']=='approved' and not inventory:raise ValueError('Add actual active room numbers before approving inventory.')
+        if requested['occupancy']=='approved':
+            if not category['max_adults_approved'] or category['max_children_approved'] is None or not category['max_occupancy']:raise ValueError('Enter approved adult, child and total occupancy limits first.')
+            if category['max_occupancy']<max(category['max_adults_approved'],category['max_children_approved']):raise ValueError('Maximum total occupancy is lower than a guest limit.')
+        if requested['rates']=='approved' and not category['nightly_rate_paise']:raise ValueError('Enter an approved nightly rate first.')
+        if requested['tax']=='approved':
+            if category['tax_percent'] is None and not B.tax_configuration(db)[1]:raise ValueError('Set an approved category tax or approve the property tax before approving tax.')
+        if requested['photos']=='approved' and not photos:raise ValueError('Upload an authentic room photo before approving photographs. No photo is required to publish a category.')
+        publish=f.get('publish')=='1'
+        if publish:
+            required=('details','inventory','occupancy','rates','tax')
+            if any(requested[key]!='approved' for key in required):raise ValueError('Approve category details, inventory, occupancy, rates and tax before publication.')
+            if category['tax_percent'] is not None and requested['tax']!='approved':raise ValueError('The category tax must be approved before publication.')
+        with tx(db):
+            db.execute("UPDATE pricing_rules SET approved=? WHERE category_id=?",(1 if requested['rates']=='approved' else 0,category_id))
+            db.execute("""UPDATE room_categories SET details_status=?,inventory_status=?,occupancy_status=?,rates_status=?,tax_status=?,photos_status=?,
+                publication_status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?""",
+                tuple(requested[key] for key in ('details','inventory','occupancy','rates','tax','photos'))+('published' if publish else 'unpublished',category_id))
+            for key,setting_key in (('inventory','room_inventory_confirmed'),('occupancy','room_occupancy_confirmed'),('rates','room_rates_confirmed')):
+                if requested[key]=='approved':set_setting(db,setting_key,'1')
+            B.audit(db,g.user,'category_approval_updated','category',category_id,
+                '; '.join(f'{key}={value}' for key,value in requested.items())+f"; publication={'published' if publish else 'unpublished'}")
+        flash('Category approval and publication statuses saved.','ok')
+    except ValueError as e:flash(str(e),'error')
+    return redirect(url_for('admin.categories'))
 
 def _inventory_categories(db,form=None):
-    rows=[dict(r) for r in db.execute('SELECT c.id,c.name,c.ac,c.base_price_paise,c.max_adults,c.max_children,c.property_id,p.name pname FROM room_categories c JOIN properties p ON p.id=c.property_id WHERE c.active=1 AND p.active=1 ORDER BY p.id,c.ac DESC,c.name')]
+    rows=[dict(r) for r in db.execute('SELECT c.id,c.name,c.room_type,c.ac,c.nightly_rate_paise,c.max_adults_approved max_adults,c.max_children_approved max_children,c.max_occupancy,c.details_status,c.property_id,p.name pname FROM room_categories c JOIN properties p ON p.id=c.property_id WHERE c.active=1 AND p.active=1 ORDER BY p.id,c.ac DESC,c.name')]
     for row in rows:
         room_key=f"rooms_{row['id']}";rate_key=f"rate_{row['id']}"
         existing=db.execute('SELECT id,number,status,category_id,price_override_paise FROM rooms WHERE property_id=? AND category_id=? ORDER BY number',(row['property_id'],row['id'])).fetchall()
         row['existing_rooms']=[dict(x) for x in existing]
         row['room_numbers']='\n'.join(x['number'] for x in existing)
-        row['rate_value']=f"{row['base_price_paise']/100:.2f}" if row['base_price_paise'] else ''
+        row['rate_value']=f"{row['nightly_rate_paise']/100:.2f}" if row['nightly_rate_paise'] else ''
         if form is not None:
             if rate_key in form:row['rate_value']=form.get(rate_key,'')
             if room_key in form:row['room_numbers']='\n'.join(form.getlist(room_key))
-            for field in ('max_adults','max_children'):
+            for field in ('max_adults','max_children','max_occupancy'):
                 key=f"{field}_{row['id']}"
                 if key in form:row[field]=form.get(key,'')
     return rows
@@ -150,26 +281,31 @@ def _inventory_payload(db,form):
     errors=[];rows=_inventory_categories(db);expected={str(r['id']) for r in rows};submitted=form.getlist('category_id')
     if not rows:errors.append('No active room categories exist under active properties.')
     if len(submitted)!=len(set(submitted)) or set(submitted)!=expected:errors.append('Submit each active property/category exactly once.')
-    proposal=[];seen_numbers={}
+    proposal=[];seen_numbers={};rates_confirmed=form.get('confirm_rates')=='1';occupancy_confirmed=form.get('confirm_occupancy')=='1';inventory_confirmed=form.get('confirm_rooms')=='1';details_confirmed=form.get('confirm_details')=='1'
     for category in rows:
         cid=category['id'];pid=category['property_id'];name=category['name'];pname=category['pname']
         rate_text=(form.get(f'rate_{cid}','') or '').strip()
-        try:
-            rate=Decimal(rate_text)
-            if not rate.is_finite() or rate<=0 or rate>Decimal('10000000') or rate!=rate.quantize(Decimal('0.01')):raise ValueError
-            rate_paise=int(rate*100)
-        except (InvalidOperation,ValueError):
-            errors.append(f'{pname} · {name}: enter an approved nightly rate with at most two decimal places.')
-            rate_paise=0
-        occupancy={}
-        for field,label,low,high in (('max_adults','maximum adults',1,12),('max_children','maximum children',0,12)):
+        rate_paise=None
+        if rate_text:
             try:
-                number=int(form.get(f'{field}_{cid}',''))
-                if not low<=number<=high:raise ValueError
+                rate=Decimal(rate_text)
+                if not rate.is_finite() or rate<=0 or rate>Decimal('10000000') or rate!=rate.quantize(Decimal('0.01')):raise ValueError
+                rate_paise=int(rate*100)
+            except (InvalidOperation,ValueError):errors.append(f'{pname} · {name}: enter a nightly rate with at most two decimal places, or leave it pending.')
+        elif rates_confirmed:errors.append(f'{pname} · {name}: an approved nightly rate is required to confirm pricing.')
+        occupancy={}
+        for field,label,low,high in (('max_adults','maximum adults',1,12),('max_children','maximum children',0,12),('max_occupancy','maximum total occupancy',1,24)):
+            text=(form.get(f'{field}_{cid}','') or '').strip()
+            try:
+                number=int(text) if text else None
+                if number is not None and not low<=number<=high:raise ValueError
+                if number is None and occupancy_confirmed:raise ValueError
             except (TypeError,ValueError):
-                errors.append(f'{pname} · {name}: {label} must be between {low} and {high}.')
-                number=low
+                errors.append(f'{pname} · {name}: {label} must be from {low} to {high}, or left blank and pending.')
+                number=None
             occupancy[field]=number
+        if occupancy_confirmed and all(occupancy.get(k) is not None for k in ('max_adults','max_children','max_occupancy')) and occupancy['max_occupancy']<max(occupancy['max_adults'],occupancy['max_children']):
+            errors.append(f'{pname} · {name}: maximum total occupancy cannot be lower than an approved guest limit.')
         room_numbers=[]
         for value in form.getlist(f'rooms_{cid}'):
             for raw in value.replace(',','\n').splitlines():
@@ -188,8 +324,12 @@ def _inventory_payload(db,form):
                     errors.append(f'{pname}: room {number} is already assigned to another category. Reassign it in Admin → Rooms first.')
                     continue
                 room_numbers.append({'number':number,'existing_id':existing['id'] if existing else None,'was_inactive':bool(existing and existing['status']!='active'),'has_price_override':bool(existing and existing['price_override_paise'])})
-        if not room_numbers:errors.append(f'{pname} · {name}: enter at least one actual room number.')
-        proposal.append({'category_id':cid,'property_id':pid,'property':pname,'category':name,'ac':bool(category['ac']),'rate_paise':rate_paise,'max_adults':occupancy['max_adults'],'max_children':occupancy['max_children'],'rooms':room_numbers})
+        if inventory_confirmed and not room_numbers and not category['room_numbers']:errors.append(f'{pname} · {name}: enter actual room numbers before confirming inventory.')
+        if details_confirmed and not category['room_type']:errors.append(f'{pname} · {name}: enter a management-confirmed room type before confirming details.')
+        if form.get('confirm_room_photos')=='1':
+            photo_count=db.execute('SELECT COUNT(*) FROM room_images i JOIN rooms r ON r.id=i.room_id WHERE r.category_id=?',(cid,)).fetchone()[0]
+            if not photo_count:errors.append(f'{pname} · {name}: upload authentic room photos before confirming photographs.')
+        proposal.append({'category_id':cid,'property_id':pid,'property':pname,'category':name,'room_type':category['room_type'],'ac':bool(category['ac']),'rate_paise':rate_paise,'max_adults':occupancy['max_adults'],'max_children':occupancy['max_children'],'max_occupancy':occupancy['max_occupancy'],'rooms':room_numbers})
     tax_text=(form.get('tax_percent','') or '').strip();tax_confirmed=form.get('confirm_tax')=='1'
     if not tax_text:
         if tax_confirmed:errors.append('Enter the management-approved tax percentage; a blank value cannot be confirmed as 0%.')
@@ -202,15 +342,35 @@ def _inventory_payload(db,form):
         except (InvalidOperation,ValueError):
             errors.append('Tax must be a percentage from 0 to 100 with at most two decimal places, or remain blank and pending.')
             tax_value=''
-    return {'categories':proposal,'tax_percent':tax_value,'tax_confirmed':tax_confirmed},errors
+    return {
+        'categories':proposal,
+        'tax_percent':tax_value,
+        'tax_confirmed':tax_confirmed,
+        'details_confirmed':details_confirmed,
+        'rates_confirmed':rates_confirmed,
+        'occupancy_confirmed':occupancy_confirmed,
+        'rooms_confirmed':inventory_confirmed,
+        'photos_confirmed':form.get('confirm_room_photos')=='1'
+    },errors
 
 def _inventory_setup_page(db,form=None,errors=None,status=200):
     tax_percent=setting(db,'tax_percent')
     if tax_percent is None and current_app.config.get('TAX_PERCENT_CONFIGURED'):tax_percent=f"{current_app.config['TAX_PERCENT']:.2f}"
     if form is not None and 'tax_percent' in form:tax_percent=form.get('tax_percent','')
     tax_confirmed=B.tax_configuration(db)[1]
-    if form is not None:tax_confirmed=form.get('confirm_tax')=='1'
-    return render_template('admin/inventory_setup.html',categories=_inventory_categories(db,form),tax_percent=tax_percent or '',tax_confirmed=tax_confirmed,errors=errors or []),status
+    config=B.inventory_configuration(db)
+    categories=_inventory_categories(db,form)
+    details_confirmed=bool(categories) and all(category.get('details_status')=='approved' for category in categories)
+    if form is not None:
+        tax_confirmed=form.get('confirm_tax')=='1'
+        details_confirmed=form.get('confirm_details')=='1'
+        config={
+            'rates_confirmed':form.get('confirm_rates')=='1',
+            'occupancy_confirmed':form.get('confirm_occupancy')=='1',
+            'rooms_confirmed':form.get('confirm_rooms')=='1',
+            'photos_confirmed':form.get('confirm_room_photos')=='1'
+        }
+    return render_template('admin/inventory_setup.html',categories=categories,tax_percent=tax_percent or '',tax_confirmed=tax_confirmed,details_confirmed=details_confirmed,errors=errors or [],**config),status
 
 @bp.get('/inventory-setup')
 @require('rooms')
@@ -243,17 +403,36 @@ def inventory_setup_apply():
             for category in proposal['categories']:
                 current=db.execute('SELECT id FROM room_categories WHERE id=? AND property_id=? AND active=1',(category['category_id'],category['property_id'])).fetchone()
                 if not current or not db.execute('SELECT 1 FROM properties WHERE id=? AND active=1',(category['property_id'],)).fetchone():raise ValueError('A property or category changed after review. Review the inventory again.')
-                db.execute('UPDATE room_categories SET base_price_paise=?,max_adults=?,max_children=? WHERE id=? AND property_id=?',(category['rate_paise'],category['max_adults'],category['max_children'],category['category_id'],category['property_id']))
+                db.execute("""UPDATE room_categories SET nightly_rate_paise=?,max_adults_approved=?,max_children_approved=?,max_occupancy=?,
+                    base_price_paise=COALESCE(?,0),max_adults=COALESCE(?,2),max_children=COALESCE(?,1),updated_at=CURRENT_TIMESTAMP
+                    WHERE id=? AND property_id=?""",(category['rate_paise'],category['max_adults'],category['max_children'],category['max_occupancy'],category['rate_paise'],category['max_adults'],category['max_children'],category['category_id'],category['property_id']))
                 for room in category['rooms']:
                     existing=db.execute('SELECT id,category_id FROM rooms WHERE property_id=? AND lower(number)=lower(?)',(category['property_id'],room['number'])).fetchone()
                     if existing and existing['category_id']!=category['category_id']:raise ValueError(f"Room {room['number']} was assigned to another category after review.")
                     if existing:db.execute("UPDATE rooms SET status='active' WHERE id=?",(existing['id'],))
                     else:db.execute('INSERT INTO rooms(property_id,category_id,number) VALUES(?,?,?)',(category['property_id'],category['category_id'],room['number']))
+                statuses={
+                    'details':'approved' if proposal['details_confirmed'] else 'pending',
+                    'inventory':'approved' if proposal['rooms_confirmed'] else 'pending',
+                    'occupancy':'approved' if proposal['occupancy_confirmed'] else 'pending',
+                    'rates':'approved' if proposal['rates_confirmed'] else 'pending',
+                    'tax':'approved' if proposal['tax_confirmed'] else 'pending',
+                    'photos':'approved' if proposal['photos_confirmed'] else 'pending'}
+                count=db.execute("SELECT COUNT(*) FROM rooms WHERE category_id=? AND status='active'",(category['category_id'],)).fetchone()[0]
+                ready=all(statuses[k]=='approved' for k in ('details','inventory','occupancy','rates','tax')) and count>0 and category['rate_paise'] and category['max_adults'] is not None and category['max_children'] is not None and category['max_occupancy'] is not None
+                db.execute("""UPDATE room_categories SET details_status=?,inventory_status=?,occupancy_status=?,rates_status=?,tax_status=?,photos_status=?,
+                    publication_status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?""",
+                    tuple(statuses[k] for k in ('details','inventory','occupancy','rates','tax','photos'))+('published' if ready else 'unpublished',category['category_id']))
+                db.execute("UPDATE pricing_rules SET approved=? WHERE category_id=?",(1 if proposal['rates_confirmed'] else 0,category['category_id']))
             set_setting(db,'tax_percent',proposal['tax_percent'])
             set_setting(db,'tax_percent_confirmed','1' if proposal['tax_confirmed'] else '0')
-            B.audit(db,g.user,'inventory_setup_applied','settings','inventory',f"{len(proposal['categories'])} categories; tax {'confirmed' if proposal['tax_confirmed'] else 'pending'}")
+            set_setting(db,'room_rates_confirmed','1' if proposal['rates_confirmed'] else '0')
+            set_setting(db,'room_occupancy_confirmed','1' if proposal['occupancy_confirmed'] else '0')
+            set_setting(db,'room_inventory_confirmed','1' if proposal['rooms_confirmed'] else '0')
+            set_setting(db,'room_photos_confirmed','1' if proposal['photos_confirmed'] else '0')
+            B.audit(db,g.user,'inventory_setup_applied','settings','inventory',f"{len(proposal['categories'])} categories; rooms {'confirmed' if proposal['rooms_confirmed'] else 'pending'}; rates {'confirmed' if proposal['rates_confirmed'] else 'pending'}; occupancy {'confirmed' if proposal['occupancy_confirmed'] else 'pending'}; photos {'confirmed' if proposal['photos_confirmed'] else 'pending'}; tax {'confirmed' if proposal['tax_confirmed'] else 'pending'}")
         session.pop('inventory_review',None)
-        flash('Inventory configuration applied. Tax is confirmed.' if proposal['tax_confirmed'] else 'Inventory configuration applied. Tax remains pending; online bookings are disabled.','ok' if proposal['tax_confirmed'] else 'error')
+        flash('Inventory configuration applied. Management confirmations were saved.' if proposal['rates_confirmed'] and proposal['occupancy_confirmed'] and proposal['rooms_confirmed'] and proposal['photos_confirmed'] and proposal['tax_confirmed'] else 'Inventory configuration applied. Any unconfirmed room numbers, rates, occupancy, room photos or tax remain unpublished. Online booking is disabled until required approvals are complete.','ok' if proposal['rates_confirmed'] and proposal['occupancy_confirmed'] and proposal['rooms_confirmed'] and proposal['photos_confirmed'] and proposal['tax_confirmed'] else 'error')
         return redirect(url_for('admin.inventory_setup'))
     except Exception as e:
         session.pop('inventory_review',None);flash(str(e) or 'Could not apply inventory configuration. No changes were saved.','error')
@@ -274,6 +453,11 @@ def tax_settings():
             if not value.is_finite() or value<0 or value>100 or value!=value.quantize(Decimal('0.01')):raise ValueError
             value=format(value,'f')
         set_setting(db,'tax_percent',value);set_setting(db,'tax_percent_confirmed','1' if confirmed else '0')
+        if confirmed:
+            db.execute("""UPDATE room_categories SET tax_status='approved',
+                publication_status=CASE WHEN details_status='approved' AND inventory_status='approved' AND occupancy_status='approved' AND rates_status='approved' THEN 'published' ELSE 'unpublished' END,
+                updated_at=CURRENT_TIMESTAMP WHERE tax_percent IS NULL""")
+        else:_unpublish_room_data(db,tax=True)
         B.audit(db,g.user,'tax_settings_saved','settings','tax_percent',f"{'confirmed' if confirmed else 'unconfirmed'} {value}%")
         flash('Tax percentage confirmed and saved.' if confirmed else 'Tax value saved as unconfirmed; online bookings remain disabled.','ok' if confirmed else 'error')
     except (InvalidOperation,ValueError):flash('Enter a tax percentage from 0 to 100. Confirm it only after management approval.','error')
@@ -281,13 +465,21 @@ def tax_settings():
 @bp.post('/pricing')
 @require('rooms')
 def pricing_add():
-    f=request.form
-    try:get_db().execute('INSERT INTO pricing_rules(category_id,label,start_date,end_date,price_paise) VALUES(?,?,?,?,?)',(int(f['category_id']),f.get('label','')[:60],f['start'],f['end'],_money(f['price'])));flash('Seasonal rate added.','ok')
+    f=request.form;db=get_db()
+    try:
+        category_id=int(f['category_id'])
+        if f['end']<f['start']:raise ValueError
+        db.execute('INSERT INTO pricing_rules(category_id,label,start_date,end_date,price_paise) VALUES(?,?,?,?,?)',(category_id,f.get('label','')[:60],f['start'],f['end'],_money(f['price'])))
+        _category_unpublish(db,category_id,{'rates'});flash('Seasonal rate added as pending. Approve category rates before publishing.','ok')
     except Exception:flash('Check the dates and price.','error')
     return back('admin.categories')
 @bp.post('/pricing/<int:xid>/delete')
 @require('rooms')
-def pricing_delete(xid):get_db().execute('DELETE FROM pricing_rules WHERE id=?',(xid,));return back('admin.categories')
+def pricing_delete(xid):
+    db=get_db();row=db.execute('SELECT category_id FROM pricing_rules WHERE id=?',(xid,)).fetchone()
+    if row:
+        db.execute('DELETE FROM pricing_rules WHERE id=?',(xid,));_category_unpublish(db,row['category_id'],{'rates'})
+    return back('admin.categories')
 # ---- dynamic pricing
 @bp.get('/pricing/dynamic')
 @require('rooms')
@@ -306,6 +498,7 @@ def dynamic_settings():
     try:
         with tx(db):
             DP.save_settings(db,bool(f.get('enabled')),int(f.get('max_increase_pct','')),int(f.get('max_discount_pct','')),int(f.get('rounding_rupees','')),int(f.get('peak_threshold_pct','')))
+            _unpublish_room_data(db,rates=True)
             B.audit(db,g.user,'dynamic_pricing_settings_saved','settings','dynamic_pricing')
         flash('Dynamic pricing settings saved.','ok')
     except (ValueError,TypeError) as e:flash(str(e) or 'Check the dynamic pricing settings.','error')
@@ -338,6 +531,7 @@ def dynamic_rule_add():
             if end<start:raise ValueError('Event end date must not be before its start date.')
         with tx(db):
             rule_id=db.execute('INSERT INTO dynamic_rules(category_id,name,kind,dow,threshold,start_date,end_date,pct,priority) VALUES(?,?,?,?,?,?,?,?,?)',(category,name,kind,dow,threshold,start,end,pct,priority)).lastrowid
+            _unpublish_room_data(db,rates=True)
             B.audit(db,g.user,'dynamic_rule_added','dynamic_rule',rule_id,name)
         flash('Dynamic pricing rule added.','ok')
     except (ValueError,TypeError) as e:flash(str(e) or 'Check the rule details.','error')
@@ -349,6 +543,7 @@ def dynamic_rule_toggle(rule_id):
     if not rule:abort(404)
     with tx(db):
         db.execute('UPDATE dynamic_rules SET active=1-active WHERE id=?',(rule_id,))
+        _unpublish_room_data(db,rates=True)
         B.audit(db,g.user,'dynamic_rule_toggled','dynamic_rule',rule_id,rule['name'])
     flash('Dynamic pricing rule updated.','ok');return redirect(url_for('admin.dynamic_pricing'))
 @bp.post('/pricing/dynamic/rules/<int:rule_id>/delete')
@@ -358,6 +553,7 @@ def dynamic_rule_delete(rule_id):
     if not rule:abort(404)
     with tx(db):
         db.execute('DELETE FROM dynamic_rules WHERE id=?',(rule_id,))
+        _unpublish_room_data(db,rates=True)
         B.audit(db,g.user,'dynamic_rule_deleted','dynamic_rule',rule_id,rule['name'])
     flash('Dynamic pricing rule deleted.','ok');return redirect(url_for('admin.dynamic_pricing'))
 # ---- site media
@@ -415,7 +611,10 @@ def media_upload():
             finally:
                 if not inserted:M.delete_upload(stored['path'],current_app.config['UPLOAD_DIR'])
             saved_count+=1
-        if saved_count:flash(f'{saved_count} image{"s" if saved_count!=1 else ""} uploaded.','ok')
+        if saved_count and kind=='room':
+            _unpublish_room_data(db,photos=True)
+            flash(f'{saved_count} room image{"s" if saved_count!=1 else ""} uploaded. Hidden until management reapproves room photos.','ok')
+        elif saved_count:flash(f'{saved_count} image{"s" if saved_count!=1 else ""} uploaded.','ok')
         for error in errors:flash(error,'error')
     except (ValueError,TypeError) as e:flash(str(e) or 'Check the media details.','error')
     return redirect(url_for('admin.media_page',kind=kind))
@@ -442,6 +641,7 @@ def media_save(media_id):
         with tx(db):
             db.execute('UPDATE site_media SET property_id=?,category_id=?,title=?,caption=?,link_url=?,sort=?,active=? WHERE id=?',
                 (property_id,category_id,title,caption,link,sort,1 if f.get('active') else 0,media_id))
+            if kind=='room':_unpublish_room_data(db,photos=True)
             B.audit(db,g.user,'site_media_updated','site_media',media_id,title or '')
         flash('Image details saved.','ok')
     except (ValueError,TypeError) as e:flash(str(e) or 'Check the image details.','error')
@@ -453,6 +653,7 @@ def media_delete(media_id):
     if not row:abort(404)
     with tx(db):
         db.execute('DELETE FROM site_media WHERE id=?',(media_id,))
+        if row['kind']=='room':_unpublish_room_data(db,photos=True)
         B.audit(db,g.user,'site_media_deleted','site_media',media_id,row['title'] or '')
     M.delete_upload(row['path'],current_app.config['UPLOAD_DIR'])
     flash('Image deleted.','ok');return redirect(url_for('admin.media_page',kind=row['kind']))

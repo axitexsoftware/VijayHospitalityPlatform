@@ -25,6 +25,7 @@ python scripts/seed.py          # properties, AC / Non-AC categories, amenities 
 python scripts/create_admin.py  # first owner account (password: 10+ chars, mixed case, a number)
 ```
 For local UI/report review only, create clearly labeled demo rooms, bookings, receipts and finance entries with `python scripts/seed_demo_data.py --confirm`. Remove that dataset with `python scripts/seed_demo_data.py --remove --confirm`. The command refuses to run when `APP_ENV=production`.
+To preview public availability search with clearly labeled sample rooms and existing bundled room photos, run `python scripts/seed_search_demo.py --confirm`; remove them with `python scripts/seed_search_demo.py --remove --confirm`. This is disabled in production. Room pages rotate through available photos for a multi-angle preview; a continuous 360° tour is shown after management uploads and approves a real 2:1 equirectangular panorama in Admin → Rooms.
 Optional site photos can be imported with `python scripts/seed_media.py`. Put exactly four landscape images in
 `photos/slides/`, gallery images in `photos/gallery/`, and room-category images in
 `photos/rooms/<category name>/` (folder name matched case-insensitively). Re-running the importer skips source files already imported.

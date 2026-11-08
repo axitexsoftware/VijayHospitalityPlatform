@@ -9,34 +9,92 @@ def health():
     try:get_db().execute('SELECT 1');return jsonify(status='ok')
     except Exception:return jsonify(status='error'),500
 @bp.get('/availability')
+@bp.get('/rooms/availability')
 @rate_limit('avail',60,60)
 def availability():
     a=request.args;db=get_db()
     try:rooms_required=int(a.get('rooms',1))
     except (ValueError,TypeError):return err('Enter a valid number of rooms.',400,{'rooms':'Enter a number from 1 to 10.'})
     if not 1<=rooms_required<=10:return err('Choose between 1 and 10 rooms.',400,{'rooms':'Choose between 1 and 10 rooms.'})
-    try:rs=B.search(db,a.get('check_in',''),a.get('check_out',''),a.get('adults',1),a.get('children',0),category_id=a.get('category_id') or None,property_id=a.get('property_id') or None)
+    publication=B.inventory_configuration(db)
+    if not publication['rates_confirmed'] or not publication['occupancy_confirmed'] or not publication['rooms_confirmed']:
+        return jsonify(count=0,rooms_required=rooms_required,can_accommodate=False,inventory_count=0,inventory_status='management_confirmation_pending',rates_confirmed=publication['rates_confirmed'],occupancy_confirmed=publication['occupancy_confirmed'],rooms_confirmed=publication['rooms_confirmed'],tax_configured=B.tax_configuration(db)[1],message='Room numbers, rates and occupancy details are subject to management confirmation. Please contact the property team.',rooms=[])
+    if B.inventory_publication_error(db):
+        active=db.execute("SELECT COUNT(*) FROM rooms r JOIN room_categories c ON c.id=r.category_id JOIN properties p ON p.id=r.property_id WHERE r.status='active' AND c.active=1 AND p.active=1").fetchone()[0]
+        status='not_configured' if not active else 'management_confirmation_pending'
+        message='No bookable rooms have been configured yet. Contact the property for availability.' if not active else 'Room details, rates, occupancy and inventory are subject to management confirmation. Contact the property team.'
+        return jsonify(count=0,rooms_required=rooms_required,can_accommodate=False,inventory_count=0,inventory_status=status,tax_configured=B.tax_configuration(db)[1],message=message,rooms=[])
+    try:rs=B.search(db,a.get('check_in',''),a.get('check_out',''),a.get('adults',1),a.get('children',0),category_id=a.get('category_id') or None,property_id=a.get('property_id') or None,rooms=rooms_required)
     except B.Invalid as e:return err(e,400,e.errors)
     inventory=db.execute(f'SELECT COUNT(*) FROM ({B.ROOM_SQL})').fetchone()[0]
-    _,tax_configured=B.tax_configuration(db)
+    tax_configured=all(r['quote']['tax_configured'] for r in rs) if rs else B.tax_configuration(db)[1]
     can_accommodate=len(rs)>=rooms_required and tax_configured
     message='' if can_accommodate else 'No bookable rooms have been configured yet. Contact the property for availability.' if not inventory else 'Tax settings need admin confirmation before online booking can be enabled.' if not tax_configured else f'Only {len(rs)} room(s) are available for these dates; {rooms_required} requested.' if rs else 'No rooms are available for those dates.'
     status='not_configured' if not inventory else 'tax_unconfirmed' if not tax_configured else 'published'
-    return jsonify(count=len(rs),rooms_required=rooms_required,can_accommodate=can_accommodate,inventory_count=inventory,inventory_status=status,tax_configured=tax_configured,message=message,rooms=[dict(room_id=r['id'],number=r['number'],property=r['pname'],category=r['cat_name'],ac=bool(r['ac']),nights=r['quote']['nights'],price_per_night_paise=r['quote']['avg'],tax_paise=r['quote']['tax'],total_paise=r['quote']['total'],tax_configured=r['quote']['tax_configured'],amenities=r['amenities']) for r in rs])
+    return jsonify(count=len(rs),rooms_required=rooms_required,can_accommodate=can_accommodate,inventory_count=inventory,inventory_status=status,tax_configured=tax_configured,message=message,rooms=[dict(room_id=r['id'],number=r['number'],property=r['pname'],category_id=r['category_id'],category=r['cat_name'],ac=bool(r['ac']),max_adults=r['max_adults'],max_children=r['max_children'],max_occupancy=r['max_occupancy'],nights=r['quote']['nights'],price_per_night_paise=r['quote']['avg'],tax_paise=r['quote']['tax'],total_paise=r['quote']['total'],tax_configured=r['quote']['tax_configured'],amenities=r['amenities']) for r in rs])
+
+@bp.get('/rooms/search')
+@rate_limit('avail',60,60)
+def room_search():
+    a=request.args;db=get_db()
+    try:
+        rooms_required=int(a.get('rooms',1))
+        if not 1<=rooms_required<=10:return err('Choose between 1 and 10 rooms.',400,{'rooms':'Choose between 1 and 10 rooms.'})
+        results=B.search(db,a.get('check_in',''),a.get('check_out',''),a.get('adults',1),a.get('children',0),category_id=a.get('category_id') or None,property_id=a.get('property_id') or None,rooms=rooms_required)
+    except B.Invalid as e:return err(e,409 if 'subject to management confirmation' in str(e) else 400,e.errors)
+    groups={}
+    for room in results:
+        group=groups.setdefault(room['category_id'],dict(category_id=room['category_id'],name=room['cat_name'],room_type=room['room_type'],property=room['pname'],currency=room['currency'],available_count=0,max_adults=room['max_adults'],max_children=room['max_children'],max_occupancy=room['max_occupancy'],rooms=[]))
+        group['available_count']+=1
+        group['rooms'].append(dict(room_id=room['id'],number=room['number'],price_per_night_paise=room['quote']['avg'],room_total_paise=room['quote']['room_total'],tax_paise=room['quote']['tax'],total_paise=room['quote']['total'],tax_configured=room['quote']['tax_configured'],nights=room['quote']['nights'],amenities=room['amenities'],photos=room['images']))
+    can_accommodate=len(results)>=rooms_required
+    return jsonify(check_in=a.get('check_in'),check_out=a.get('check_out'),rooms_required=rooms_required,adults=int(a.get('adults',1)),children=int(a.get('children',0)),available_count=len(results),can_accommodate=can_accommodate,categories=list(groups.values()),message='' if can_accommodate else f'Only {len(results)} room(s) are available for these dates; {rooms_required} requested.')
+
+@bp.get('/room-categories')
+def room_categories():
+    if B.inventory_publication_error(get_db()):return jsonify(items=[],message='Room details are pending management confirmation.')
+    rows=get_db().execute("""SELECT c.id,c.property_id,p.name property,c.name,c.room_type,c.ac,c.description,c.max_adults_approved max_adults,
+        c.max_children_approved max_children,c.max_occupancy,c.nightly_rate_paise,c.currency,c.tax_percent,c.photos_status,
+        (SELECT COUNT(*) FROM rooms r WHERE r.category_id=c.id AND r.status='active') inventory_count
+        FROM room_categories c JOIN properties p ON p.id=c.property_id WHERE c.active=1 AND p.active=1
+        AND c.publication_status='published' AND c.details_status='approved' AND c.inventory_status='approved'
+        AND c.occupancy_status='approved' AND c.rates_status='approved' AND c.tax_status='approved' ORDER BY p.id,c.name""").fetchall()
+    return jsonify(items=[dict(row) for row in rows])
+
+@bp.get('/rooms/<int:category_id>')
+def room_category(category_id):
+    if B.inventory_publication_error(get_db()):return err('Room details are pending management confirmation.',409)
+    row=get_db().execute("""SELECT c.id,c.property_id,p.name property,c.name,c.room_type,c.ac,c.description,c.max_adults_approved max_adults,
+        c.max_children_approved max_children,c.max_occupancy,c.nightly_rate_paise,c.currency,c.tax_percent,c.photos_status
+        FROM room_categories c JOIN properties p ON p.id=c.property_id WHERE c.id=? AND c.active=1 AND p.active=1
+        AND c.publication_status='published' AND c.details_status='approved' AND c.inventory_status='approved'
+        AND c.occupancy_status='approved' AND c.rates_status='approved' AND c.tax_status='approved'""",(category_id,)).fetchone()
+    if not row:return err('Room category not found.',404)
+    return jsonify(category=dict(row))
+
 @bp.get('/price-calendar')
 @rate_limit('pricecalendar',60,60)
 def price_calendar():
     try:
-        days=DP.calendar(get_db(),request.args.get('category_id',''),request.args.get('start',''),request.args.get('months','1'))
+        db=get_db()
+        if B.inventory_publication_error(db):return err('Room rates are subject to management confirmation.',409,{'rates':'Contact the property team for current rates.'})
+        category=db.execute("SELECT id FROM room_categories WHERE id=? AND rates_status='approved' AND publication_status='published'",(request.args.get('category_id',''),)).fetchone()
+        if not category:return err('Room rates are subject to management confirmation.',409,{'rates':'Contact the property team for current rates.'})
+        days=DP.calendar(db,request.args.get('category_id',''),request.args.get('start',''),request.args.get('months','1'))
         return jsonify(days=days)
     except (ValueError,TypeError) as e:return err(e)
 @bp.get('/price-quote')
+@bp.get('/rooms/rates')
 @rate_limit('pricequote',60,60)
 def price_quote():
     try:
         ci,co,_,_=B.validate_stay(request.args.get('check_in',''),request.args.get('check_out',''),1,0)
-        db=get_db();q=DP.quote(db,request.args.get('category_id',''),ci,co)
-        tax_percent,tax_configured=B.tax_configuration(db)
+        db=get_db()
+        if B.inventory_publication_error(db):return err('Room rates are subject to management confirmation.',409,{'rates':'Contact the property team for current rates.'})
+        category_id=int(request.args.get('category_id',''));category=db.execute("SELECT id FROM room_categories WHERE id=? AND rates_status='approved' AND publication_status='published'",(category_id,)).fetchone()
+        if not category:return err('Room rates are subject to management confirmation.',409,{'rates':'Contact the property team for current rates.'})
+        q=DP.quote(db,category_id,ci,co)
+        tax_percent,tax_configured=B.tax_configuration(db,category_id)
         q['tax_configured']=tax_configured
         q['tax_paise']=round(q['room_total_paise']*tax_percent/100) if tax_configured else 0
         q['total_paise']=q['room_total_paise']+q['tax_paise']
@@ -48,15 +106,18 @@ def price_quote():
 def media_list():
     kind=request.args.get('kind','')
     if kind not in('slide','gallery','room'):return err('Choose a valid media kind.')
+    db=get_db()
     sql='SELECT id,kind,property_id,category_id,title,caption,link_url,path,sort FROM site_media WHERE kind=? AND active=1'
     args=[kind]
+    if kind in('gallery','slide'):sql+=' AND category_id IS NULL'
     for field in ('property_id','category_id'):
         raw=request.args.get(field)
         if raw:
             try:ident=int(raw)
             except ValueError:return err(f'Invalid {field}.')
             sql+=f' AND {field}=?';args.append(ident)
-    rows=[dict(r) for r in get_db().execute(sql+' ORDER BY sort,id',args)]
+    if kind=='room':sql+=" AND category_id IN (SELECT id FROM room_categories WHERE photos_status='approved' AND publication_status='published')"
+    rows=[dict(r) for r in db.execute(sql+' ORDER BY sort,id',args)]
     return jsonify(items=rows)
 @bp.post('/bookings')
 @rate_limit('apibook',10,600)
@@ -97,6 +158,15 @@ def payment_webhook():
 @rate_limit('chat',25,60)
 def chat():
     j=request.get_json(silent=True) or {};db=get_db()
-    out=ai.reply(db,session.get('chat_token') or j.get('token'),j.get('message',''),j.get('language','auto'));session['chat_token']=out['token']
+    out=ai.reply(db,session.get('chat_token'),j.get('message',''),j.get('language','auto'));session['chat_token']=out['token']
     if out.get('booking'):session['refs']=(session.get('refs',[])+[out['booking']])[-10:]
     return jsonify(reply=out['reply'],status=out.get('status'),booking=out.get('booking'),link=out.get('link'),unavailable=out.get('unavailable',False))
+@bp.get('/chat')
+@rate_limit('chat-history',60,60)
+def chat_history():
+    token=session.get('chat_token')
+    if not token:return jsonify(messages=[],status='open')
+    db=get_db();conv=db.execute('SELECT id,status FROM ai_conversations WHERE token=?',(token,)).fetchone()
+    if not conv:return jsonify(messages=[],status='open')
+    rows=db.execute("SELECT role,content,created_at FROM ai_messages WHERE conversation_id=? AND role IN('user','assistant') AND content IS NOT NULL AND content!='' ORDER BY id DESC LIMIT 40",(conv['id'],)).fetchall()
+    return jsonify(messages=[dict(role=r['role'],content=r['content'],created_at=r['created_at']) for r in reversed(rows)],status=conv['status'])

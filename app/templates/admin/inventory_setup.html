@@ -2,13 +2,13 @@
 {% block title %}Real inventory setup{% endblock %}
 {% block content %}
 <header class="dashboard-heading">
-  <div><p class="dashboard-eyebrow">PROPERTY CONFIGURATION</p><h1>Real inventory setup</h1><p>Enter actual room numbers and management-approved category rates for each active property.</p></div>
+  <div><p class="dashboard-eyebrow">PROPERTY CONFIGURATION</p><h1>Real inventory setup</h1><p>Enter only management-confirmed room details. Leave missing information blank and pending.</p></div>
   <a class="btn sm plain" href="{{url_for('admin.categories')}}">Categories and rates</a>
 </header>
 
 <section class="card inventory-safety-note">
   <strong>Nothing is saved on this screen.</strong>
-  <span>Review the complete proposal before applying it. Rooms not listed remain unchanged. Test rates are not prefilled into live properties.</span>
+  <span>Review the complete proposal before applying it. Blank values remain pending. Existing room records not listed remain unchanged.</span>
 </section>
 
 {% if errors %}<section class="flash error" role="alert"><strong>Correct these items before review:</strong><ul>{% for error in errors %}<li>{{error}}</li>{% endfor %}</ul></section>{% endif %}
@@ -23,16 +23,34 @@
       <input type="hidden" name="category_id" value="{{category.id}}">
     </header>
     <div class="inventory-fields">
-      <label>Approved base rate per night (₹)<input name="rate_{{category.id}}" type="number" min="1" max="10000000" step="0.01" value="{{category.rate_value}}" required><small>Applies to rooms in this property/category unless a room-specific override exists.</small></label>
-      <label>Maximum adults<input name="max_adults_{{category.id}}" type="number" min="1" max="12" value="{{category.max_adults}}" required></label>
-      <label>Maximum children<input name="max_children_{{category.id}}" type="number" min="0" max="12" value="{{category.max_children}}" required></label>
-      <label class="inventory-room-numbers">Actual room numbers<textarea name="rooms_{{category.id}}" rows="4" maxlength="4000" placeholder="One existing room number per line" required>{{category.room_numbers}}</textarea><small>Room numbers must be unique within this property. Listed inactive rooms will be activated when applied.</small></label>
+      <label>Nightly rate (₹)<input name="rate_{{category.id}}" type="number" min="0.01" max="10000000" step="0.01" value="{{category.rate_value}}" placeholder="Pending"><small>Only an approved category rate is used online.</small></label>
+      <label>Maximum adults<input name="max_adults_{{category.id}}" type="number" min="1" max="12" value="{{category.max_adults or ''}}" placeholder="Pending"></label>
+      <label>Maximum children<input name="max_children_{{category.id}}" type="number" min="0" max="12" value="{{category.max_children if category.max_children is not none else ''}}" placeholder="Pending"></label>
+      <label>Maximum total occupancy<input name="max_occupancy_{{category.id}}" type="number" min="1" max="24" value="{{category.max_occupancy or ''}}" placeholder="Pending"></label>
+      <label class="inventory-room-numbers">Actual room numbers<textarea name="rooms_{{category.id}}" rows="4" maxlength="4000" placeholder="One confirmed room number per line">{{category.room_numbers}}</textarea><small>Room numbers must be unique within this property. Leave blank while inventory is unconfirmed.</small></label>
     </div>
     {% if category.existing_rooms %}<details class="inventory-existing-rooms"><summary>Current database records ({{category.existing_rooms|length}})</summary><ul>{% for room in category.existing_rooms %}<li>Room {{room.number}} · {{room.status}}{% if room.price_override_paise %} · individual override {{room.price_override_paise|inr}}{% endif %}</li>{% endfor %}</ul></details>{% else %}<p class="muted inventory-existing-rooms">No room records are assigned to this active category.</p>{% endif %}
   </section>
   {% else %}
   <section class="card empty-state"><h2>No active property categories</h2><p>Create or activate property categories before setting inventory.</p><a class="btn" href="{{url_for('admin.categories')}}">Open Categories and rates</a></section>
   {% endfor %}
+
+  <section class="card inventory-tax-card">
+    <header><span class="eyebrow">Approval required</span><h2>Room details, rates, occupancy and photos</h2></header>
+    <p>These confirmations control what guests can see. Leave any item unchecked while its details are pending approval.</p>
+    <div class="inventory-tax-fields">
+      <label class="tax-confirm-label"><input type="checkbox" name="confirm_details" value="1" {{'checked' if details_confirmed}}> I confirm room category names and types are approved</label>
+      <label class="tax-confirm-label"><input type="checkbox" name="confirm_rates" value="1" {{'checked' if rates_confirmed}}> I confirm the room rates above are approved by management</label>
+      <label class="tax-confirm-label"><input type="checkbox" name="confirm_occupancy" value="1" {{'checked' if occupancy_confirmed}}> I confirm the occupancy limits above are approved by management</label>
+      <label class="tax-confirm-label"><input type="checkbox" name="confirm_rooms" value="1" {{'checked' if rooms_confirmed}}> I confirm the listed room numbers and active status are current and approved</label>
+      <label class="tax-confirm-label"><input type="checkbox" name="confirm_room_photos" value="1" {{'checked' if photos_confirmed}}> I confirm active room photos are official Vijay property photos approved for public use</label>
+    </div>
+    <p class="tax-config-status {{'confirmed' if details_confirmed else 'pending'}}">Room details: {{'confirmed' if details_confirmed else 'PENDING'}}</p>
+    <p class="tax-config-status {{'confirmed' if rates_confirmed else 'pending'}}">Room rates: {{'confirmed' if rates_confirmed else 'PENDING'}}</p>
+    <p class="tax-config-status {{'confirmed' if occupancy_confirmed else 'pending'}}">Occupancy limits: {{'confirmed' if occupancy_confirmed else 'PENDING'}}</p>
+    <p class="tax-config-status {{'confirmed' if rooms_confirmed else 'pending'}}">Room inventory: {{'confirmed' if rooms_confirmed else 'PENDING'}}</p>
+    <p class="tax-config-status {{'confirmed' if photos_confirmed else 'pending'}}">Room photos: {{'confirmed' if photos_confirmed else 'PENDING'}}</p>
+  </section>
 
   <section class="card inventory-tax-card">
     <header><span class="eyebrow">Approval required</span><h2>Tax percentage</h2></header>

@@ -12,7 +12,12 @@ class Unavailable(BookingError):pass
 class Invalid(BookingError):pass
 class NotFound(BookingError):pass
 def cfg(k):return current_app.config[k]
-def tax_configuration(db):
+def tax_configuration(db,category_id=None):
+    if category_id is not None:
+        category=db.execute('SELECT tax_percent,tax_status FROM room_categories WHERE id=?',(category_id,)).fetchone()
+        if category and category['tax_percent'] is not None:
+            if category['tax_status']!='approved':return 0.0,False
+            return float(category['tax_percent']),True
     confirmed=setting(db,'tax_percent_confirmed')
     value=setting(db,'tax_percent')
     if confirmed is not None:
@@ -20,6 +25,28 @@ def tax_configuration(db):
         except (TypeError,ValueError):return 0.0,False
         return (percent,True) if confirmed=='1' and 0<=percent<=100 else (0.0,False)
     return 0.0,False
+def inventory_configuration(db):
+    return dict(
+        rates_confirmed=setting(db,'room_rates_confirmed')=='1',
+        occupancy_confirmed=setting(db,'room_occupancy_confirmed')=='1',
+        rooms_confirmed=setting(db,'room_inventory_confirmed')=='1',
+        photos_confirmed=setting(db,'room_photos_confirmed')=='1')
+def inventory_publication_error(db):
+    config=inventory_configuration(db)
+    if not config['rates_confirmed'] or not config['occupancy_confirmed'] or not config['rooms_confirmed']:
+        return Invalid('Room details are subject to management confirmation.',{
+            'availability':'Room details, rates, occupancy and inventory are not yet approved for online booking. Please contact the property team.'})
+    ready=db.execute('''SELECT 1 FROM room_categories c JOIN properties p ON p.id=c.property_id
+        WHERE c.active=1 AND p.active=1 AND c.publication_status='published'
+        AND c.details_status='approved' AND c.inventory_status='approved'
+        AND c.occupancy_status='approved' AND c.rates_status='approved' AND c.tax_status='approved'
+        AND c.nightly_rate_paise>0 AND c.max_adults_approved>0
+        AND c.max_children_approved>=0 AND c.max_occupancy>=c.max_adults_approved
+        AND c.max_occupancy>=c.max_children_approved
+        LIMIT 1''').fetchone()
+    if ready:return None
+    return Invalid('Room rates, occupancy details and room inventory are subject to management confirmation.',{
+        'availability':'Room details, rates, occupancy and inventory are not yet approved for online booking. Please contact the property team.'})
 def audit(db,user,action,entity,eid,detail=''):
     db.execute('INSERT INTO audit_logs(at,user_id,actor,action,entity,entity_id,detail) VALUES(?,?,?,?,?,?,?)',(now_s(),user['id'] if user else None,user['email'] if user else 'system',action,entity,str(eid),detail[:500]))
 def expire_holds(db):
@@ -49,28 +76,46 @@ def validate_customer(name,phone,email):
     if e:raise Invalid('Please fix the highlighted fields.',e)
     return name,p,email or None
 def price_per_night(db,room,night,nights=1,check_in=None):
-    base=room['price_override_paise']
-    if not base:
-        r=db.execute('SELECT price_paise FROM pricing_rules WHERE category_id=? AND ?>=start_date AND ?<=end_date ORDER BY id DESC LIMIT 1',(room['category_id'],night,night)).fetchone()
-        base=r[0] if r else room['base_price_paise']
+    r=db.execute('SELECT price_paise FROM pricing_rules WHERE category_id=? AND approved=1 AND ?>=start_date AND ?<=end_date ORDER BY id DESC LIMIT 1',(room['category_id'],night,night)).fetchone()
+    base=room['price_override_paise'] or (r[0] if r else room['nightly_rate_paise'])
     return DP.nightly(db,room['category_id'],night,base,nights,check_in)['price_paise']
 def quote(db,room,ci,co):
-    nights=(d(co)-d(ci)).days;per=[price_per_night(db,room,n,nights,ci) for n in daterange(ci,co)];sub=sum(per);tax_percent,tax_configured=tax_configuration(db);tax=round(sub*tax_percent/100) if tax_configured else 0
+    nights=(d(co)-d(ci)).days;per=[price_per_night(db,room,n,nights,ci) for n in daterange(ci,co)];sub=sum(per);tax_percent,tax_configured=tax_configuration(db,room['category_id']);tax=round(sub*tax_percent/100) if tax_configured else 0
     return dict(nights=len(per),per_night=per,room_total=sub,tax=tax,total=sub+tax,avg=round(sub/len(per)),tax_configured=tax_configured,tax_percent=tax_percent if tax_configured else None)
-ROOM_SQL='''SELECT r.id,r.number,r.floor,r.description,r.category_id,r.price_override_paise,c.name cat_name,c.ac,c.image,c.description cat_desc,c.max_adults,c.max_children,c.base_price_paise,
+ROOM_SQL='''SELECT r.id,r.number,r.floor,r.description,r.category_id,r.price_override_paise,c.name cat_name,c.room_type,c.ac,c.image,c.description cat_desc,c.max_adults_approved max_adults,c.max_children_approved max_children,c.max_occupancy,c.nightly_rate_paise,c.currency,c.tax_percent,c.tax_status,c.photos_status,
  p.id pid,p.name pname,p.address paddress FROM rooms r JOIN room_categories c ON c.id=r.category_id JOIN properties p ON p.id=r.property_id
- WHERE r.status='active' AND c.active=1 AND p.active=1 AND COALESCE(r.price_override_paise,c.base_price_paise)>0'''
-def free_sql():return " AND NOT EXISTS(SELECT 1 FROM room_nights n WHERE n.room_id=r.id AND n.night>=:ci AND n.night<:co)"
-def search(db,ci,co,adults=1,children=0,category_id=None,property_id=None,max_price_paise=None,allow_past=False):
-    ci,co,adults,children=validate_stay(ci,co,adults,children,allow_past);expire_holds(db)
-    sql=ROOM_SQL+' AND c.max_adults>=:a AND c.max_children>=:ch'+free_sql();args=dict(ci=ci,co=co,a=adults,ch=children)
-    if category_id:sql+=' AND c.id=:cat';args['cat']=int(category_id)
-    if property_id:sql+=' AND p.id=:pid';args['pid']=int(property_id)
+ WHERE r.status='active' AND c.active=1 AND p.active=1 AND c.publication_status='published'
+ AND c.details_status='approved' AND c.inventory_status='approved' AND c.occupancy_status='approved' AND c.rates_status='approved' AND c.tax_status='approved'
+ AND c.nightly_rate_paise>0 AND c.max_adults_approved>0 AND c.max_children_approved>=0
+ AND c.max_occupancy>=c.max_adults_approved AND c.max_occupancy>=c.max_children_approved
+ AND c.nightly_rate_paise>0'''
+def free_sql():
+    return """ AND NOT EXISTS(SELECT 1 FROM room_nights n WHERE n.room_id=r.id AND n.night>=:ci AND n.night<:co)
+        AND NOT EXISTS(SELECT 1 FROM reservations s WHERE s.room_id=r.id AND s.status IN('pending','confirmed','checked_in')
+        AND s.check_in<:co AND s.check_out>:ci)"""
+def search(db,ci,co,adults=1,children=0,category_id=None,property_id=None,max_price_paise=None,allow_past=False,rooms=1):
+    ci,co,adults,children=validate_stay(ci,co,adults,children,allow_past)
+    publication_error=inventory_publication_error(db)
+    if publication_error:raise publication_error
+    try:rooms=int(rooms)
+    except (TypeError,ValueError):raise Invalid('Choose between 1 and 10 rooms.',{'rooms':'Choose between 1 and 10 rooms.'})
+    if not 1<=rooms<=10:raise Invalid('Choose between 1 and 10 rooms.',{'rooms':'Choose between 1 and 10 rooms.'})
+    adults_per_room=(adults+rooms-1)//rooms;children_per_room=(children+rooms-1)//rooms
+    expire_holds(db)
+    sql=ROOM_SQL+' AND c.max_adults_approved>=:a AND c.max_children_approved>=:ch AND c.max_occupancy>=:total'+free_sql();args=dict(ci=ci,co=co,a=adults_per_room,ch=children_per_room,total=adults_per_room+children_per_room)
+    if category_id:
+        try:args['cat']=int(category_id)
+        except (TypeError,ValueError):raise Invalid('Choose a valid room category.',{'category_id':'Choose a valid room category.'})
+        sql+=' AND c.id=:cat'
+    if property_id:
+        try:args['pid']=int(property_id)
+        except (TypeError,ValueError):raise Invalid('Choose a valid property.',{'property_id':'Choose a valid property.'})
+        sql+=' AND p.id=:pid'
     out=[]
     for r in db.execute(sql+' ORDER BY c.ac DESC,r.number',args):
         r=dict(r);q=quote(db,r,ci,co)
         if max_price_paise and q['avg']>max_price_paise:continue
-        r['quote']=q;r['images']=[dict(i) for i in db.execute('SELECT path,alt FROM room_images WHERE room_id=? ORDER BY sort,id',(r['id'],))] ;r['amenities']=amenities(db,r['id']);out.append(r)
+        r['quote']=q;r['images']=[dict(i) for i in db.execute('SELECT path,alt FROM room_images WHERE room_id=? ORDER BY sort,id',(r['id'],))] if r['photos_status']=='approved' else [];r['amenities']=amenities(db,r['id']);out.append(r)
     return out
 def amenities(db,room_id):return [x[0] for x in db.execute('SELECT a.name FROM amenities a JOIN room_amenities ra ON ra.amenity_id=a.id WHERE ra.room_id=? ORDER BY a.name',(room_id,))]
 def get_res(db,rid=None,ref=None):
@@ -99,14 +144,18 @@ def _insert_nights(db,room_id,rid,ci,co):
 def create_reservation(db,room_id,ci,co,adults,children,name,phone,email,source='web',user=None,hold_minutes=None,notes=None,allow_past=False):
     ci,co,adults,children=validate_stay(ci,co,adults,children,allow_past);name,phone,email=validate_customer(name,phone,email)
     if source not in('web','ai','walk-in','phone'):raise Invalid('Invalid booking source.')
-    if not tax_configuration(db)[1]:raise Invalid('Tax settings must be confirmed in Admin before accepting bookings.',{'tax':'Confirm the applicable tax percentage in Categories and rates.'})
+    publication_error=inventory_publication_error(db)
+    if publication_error:raise publication_error
     with tx(db):
         expire_holds(db)
         room=db.execute(ROOM_SQL+' AND r.id=?',(int(room_id),)).fetchone()
         if not room:raise Unavailable('That room is not available for booking.')
         room=dict(room)
-        if adults>room['max_adults'] or children>room['max_children']:raise Invalid(f"This room fits up to {room['max_adults']} adults and {room['max_children']} children.",{'guests':'Too many guests for this room.'})
-        if db.execute('SELECT 1 FROM room_nights WHERE room_id=? AND night>=? AND night<? LIMIT 1',(room['id'],ci,co)).fetchone():raise Unavailable('Sorry, that room is not available for those dates.')
+        if adults>room['max_adults'] or children>room['max_children'] or adults+children>room['max_occupancy']:raise Invalid(f"This room fits up to {room['max_adults']} adults and {room['max_children']} children, with a maximum total occupancy of {room['max_occupancy']}.",{'guests':'Too many guests for this room.'})
+        if not tax_configuration(db,room['category_id'])[1]:raise Invalid('Tax settings must be confirmed in Admin before accepting bookings.',{'tax':'Confirm the applicable tax percentage in Categories and rates.'})
+        if db.execute('''SELECT 1 FROM room_nights WHERE room_id=? AND night>=? AND night<?
+            UNION ALL SELECT 1 FROM reservations WHERE room_id=? AND status IN('pending','confirmed','checked_in')
+            AND check_in<? AND check_out>? LIMIT 1''',(room['id'],ci,co,room['id'],co,ci)).fetchone():raise Unavailable('Sorry, that room is not available for those dates.')
         q=quote(db,room,ci,co);t=now_s()
         c=db.execute('SELECT id FROM customers WHERE phone=?',(phone,)).fetchone()
         if c:cid=c[0];db.execute('UPDATE customers SET name=?,email=COALESCE(?,email) WHERE id=?',(name,email,cid))
@@ -133,13 +182,16 @@ def cancel(db,rid,reason='',user=None,by_customer=False):
     return get_res(db,rid),due
 def modify(db,rid,ci,co,adults,children,user=None):
     ci,co,adults,children=validate_stay(ci,co,adults,children,allow_past=bool(user))
-    if not tax_configuration(db)[1]:raise Invalid('Tax settings must be confirmed in Admin before changing booking totals.',{'tax':'Confirm the applicable tax percentage in Categories and rates.'})
+    publication_error=inventory_publication_error(db)
+    if publication_error:raise publication_error
     with tx(db):
         res=get_res(db,rid)
         if res['status'] not in('pending','confirmed'):raise Invalid('Only upcoming bookings can be modified.')
         room=dict(db.execute(ROOM_SQL.replace("AND c.active=1 AND p.active=1","")+' AND r.id=?',(res['room_id'],)).fetchone() or {})
         if not room:raise Unavailable('Room is not available.')
-        if adults>room['max_adults'] or children>room['max_children']:raise Invalid('Too many guests for this room.',{'guests':'Too many guests for this room.'})
+        if adults>room['max_adults'] or children>room['max_children'] or adults+children>room['max_occupancy']:raise Invalid('Too many guests for this room.',{'guests':'Too many guests for this room.'})
+        if not tax_configuration(db,room['category_id'])[1]:raise Invalid('Tax settings must be confirmed in Admin before changing booking totals.',{'tax':'Confirm the applicable tax percentage in Categories and rates.'})
+        if db.execute('SELECT 1 FROM reservations WHERE room_id=? AND id<>? AND status IN(\'pending\',\'confirmed\',\'checked_in\') AND check_in<? AND check_out>? LIMIT 1',(room['id'],rid,co,ci)).fetchone():raise Unavailable('Sorry, that room is not available for those dates.')
         db.execute('DELETE FROM room_nights WHERE reservation_id=?',(rid,));_insert_nights(db,room['id'],rid,ci,co)
         q=quote(db,room,ci,co);db.execute('UPDATE reservations SET check_in=?,check_out=?,adults=?,children=?,nights=?,room_total_paise=?,tax_paise=?,total_paise=?,updated_at=? WHERE id=?',(ci,co,adults,children,q['nights'],q['room_total'],q['tax'],q['total'],now_s(),rid))
         audit(db,user,'booking_modified','reservation',rid,f'{ci} to {co}')
@@ -148,9 +200,10 @@ def change_room(db,rid,new_room_id,user=None):
     with tx(db):
         res=get_res(db,rid)
         if res['status'] not in('pending','confirmed','checked_in'):raise Invalid('This booking cannot be reassigned.')
-        room=db.execute("SELECT r.*,c.base_price_paise,c.max_adults,c.max_children FROM rooms r JOIN room_categories c ON c.id=r.category_id WHERE r.id=? AND r.status='active'",(int(new_room_id),)).fetchone()
+        room=db.execute("SELECT r.*,c.max_adults_approved max_adults,c.max_children_approved max_children,c.max_occupancy FROM rooms r JOIN room_categories c ON c.id=r.category_id WHERE r.id=? AND r.status='active'",(int(new_room_id),)).fetchone()
         if not room:raise Unavailable('That room is not available.')
-        if res['adults']>room['max_adults'] or res['children']>room['max_children']:raise Invalid('That room is too small for this party.')
+        if res['adults']>room['max_adults'] or res['children']>room['max_children'] or res['adults']+res['children']>room['max_occupancy']:raise Invalid('That room is too small for this party.')
+        if db.execute('SELECT 1 FROM reservations WHERE room_id=? AND id<>? AND status IN(\'pending\',\'confirmed\',\'checked_in\') AND check_in<? AND check_out>? LIMIT 1',(room['id'],rid,res['check_out'],res['check_in'])).fetchone():raise Unavailable('That room is not available for those dates.')
         db.execute('DELETE FROM room_nights WHERE reservation_id=?',(rid,));_insert_nights(db,room['id'],rid,res['check_in'],res['check_out'])
         db.execute('UPDATE reservations SET room_id=?,updated_at=? WHERE id=?',(room['id'],now_s(),rid));audit(db,user,'room_reassigned','reservation',rid,f"to room {room['number']}")
     return get_res(db,rid)

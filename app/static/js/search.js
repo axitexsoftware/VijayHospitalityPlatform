@@ -64,9 +64,6 @@ updateTaxDisplay();
 
 function fallbackImage(image){
  image.addEventListener('error',function(){
-  if(!image.dataset.fallbackUsed&&image.dataset.fallback){
-   image.dataset.fallbackUsed='true';image.src=image.dataset.fallback;return;
-  }
   image.hidden=true;
   var placeholder=document.createElement('div');placeholder.className='room-photo-placeholder';
   var title=document.createElement('span');title.textContent='Room photograph';
@@ -74,7 +71,7 @@ function fallbackImage(image){
   placeholder.appendChild(title);placeholder.appendChild(note);image.parentNode.insertBefore(placeholder,image.nextSibling);
  });
 }
-document.querySelectorAll('[data-fallback]').forEach(fallbackImage);
+document.querySelectorAll('[data-room-photo]').forEach(fallbackImage);
 
 cards.forEach(function(card){
  var gallery=card.querySelector('[data-room-gallery]'),photo=gallery&&gallery.querySelector('[data-room-photo]');

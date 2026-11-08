@@ -1,8 +1,62 @@
-{% extends 'admin/base.html' %}{% block title %}Room {{r.number}}{% endblock %}
-{% block content %}<h1>Room {{r.number}} <small class="muted">{{r.pname}}</small></h1><div class="g-2"><form class="card row" method="post" style="display:flex"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label>Number<input name="number" value="{{r.number}}" required size="6"></label><label>Floor<input name="floor" value="{{r.floor or ''}}" size="4"></label>
-<label>Category<select name="category_id">{% for c in cats %}<option value="{{c.id}}" {{'selected' if c.id==r.category_id}}>{{c.name}}</option>{% endfor %}</select></label><label>Own price (₹)<input name="price" type="number" step="1" min="1" value="{{ (r.price_override_paise//100) if r.price_override_paise else '' }}"></label>
-<label>Status<select name="status"><option value="active" {{'selected' if r.status=='active'}}>Active</option><option value="inactive" {{'selected' if r.status!='active'}}>Inactive (deactivated)</option></select></label><label style="width:100%">Description<textarea name="description" rows="2">{{r.description or ''}}</textarea></label><label style="width:100%">Amenities (comma separated)<input name="amenities" value="{{amen}}"></label><button class="btn sm">Save room</button></form>
-<div class="card"><h2>Photos</h2>{% for i in imgs %}<div class="row" style="margin-bottom:8px"><img src="{{ url_for('static',filename=i.path) }}" alt="" width="90" style="border-radius:8px"><span>{{i.alt}}</span><form method="post" action="{{ url_for('admin.room_image_delete',rid=r.id,iid=i.id) }}" data-confirm="Delete this photo?"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn sm danger">Delete</button></form></div>{% endfor %}
-<form method="post" action="{{ url_for('admin.room_image',rid=r.id) }}" enctype="multipart/form-data" class="row"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label>Photo (JPEG, PNG, WebP)<input type="file" name="image" accept="image/*" required></label><label>Description<input name="alt" maxlength="150"></label><button class="btn sm">Upload</button></form></div></div>
-<div class="card"><h2>Block room (maintenance or hold)</h2><form method="post" action="{{ url_for('admin.room_block',rid=r.id) }}" class="row"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label>From<input type="date" name="start" required></label><label>Until (check-out day)<input type="date" name="end" required></label><label>Reason<input name="reason" value="Maintenance"></label><button class="btn sm">Block</button></form>
-{% if blocks %}<table class="t" style="margin-top:12px"><tr><th>Blocked night</th><th>Reason</th><th></th></tr>{% for b in blocks %}<tr><td>{{b.night|dmy}}</td><td>{{b.reason}}</td><td><form method="post" action="{{ url_for('admin.room_unblock',rid=r.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="night" value="{{b.night}}"><button class="btn sm plain">Unblock</button></form></td></tr>{% endfor %}</table>{% endif %}</div>{% endblock %}
+{% extends 'admin/base.html' %}
+{% block title %}Room {{r.number}}{% endblock %}
+{% block content %}
+<h1>Room {{r.number}} <small class="muted">{{r.pname}}</small></h1>
+<div class="g-2">
+  <form class="card row" method="post" style="display:flex">
+    <input type="hidden" name="csrf_token" value="{{csrf_token()}}">
+    <label>Number<input name="number" value="{{r.number}}" required size="6"></label>
+    <label>Floor<input name="floor" value="{{r.floor or ''}}" size="4"></label>
+    <label>Category<select name="category_id">{% for c in cats %}<option value="{{c.id}}" {{'selected' if c.id==r.category_id}}>{{c.name}}</option>{% endfor %}</select></label>
+    <label>Own price (₹)<input name="price" type="number" step="1" min="1" value="{{(r.price_override_paise//100) if r.price_override_paise else ''}}"></label>
+    <label>Status<select name="status"><option value="active" {{'selected' if r.status=='active'}}>Active</option><option value="inactive" {{'selected' if r.status!='active'}}>Inactive (deactivated)</option></select></label>
+    <label style="width:100%">Description<textarea name="description" rows="2">{{r.description or ''}}</textarea></label>
+    <label style="width:100%">Amenities (comma separated)<input name="amenities" value="{{amen}}"></label>
+    <button class="btn sm">Save room</button>
+  </form>
+  <div class="card">
+    <h2>Photos</h2>
+    {% for i in imgs %}
+    <div class="row" style="margin-bottom:8px">
+      <img src="{{url_for('static',filename=i.path)}}" alt="" width="90" style="border-radius:8px"><span>{{i.alt}}</span>
+      <form method="post" action="{{url_for('admin.room_image_delete',rid=r.id,iid=i.id)}}" data-confirm="Delete this photo?"><input type="hidden" name="csrf_token" value="{{csrf_token()}}"><button class="btn sm danger">Delete</button></form>
+    </div>
+    {% endfor %}
+    <form method="post" action="{{url_for('admin.room_image',rid=r.id)}}" enctype="multipart/form-data" class="row">
+      <input type="hidden" name="csrf_token" value="{{csrf_token()}}">
+      <label>Photo (JPEG, PNG, WebP)<input type="file" name="image" accept="image/*" required></label>
+      <label>Description<input name="alt" maxlength="150"></label><button class="btn sm">Upload</button>
+    </form>
+  </div>
+  <div class="card">
+    <h2>360° room panorama</h2>
+    <p class="muted">Upload an equirectangular image with a 2:1 width-to-height ratio. Uploading or replacing a panorama requires room-photo approval before it is shown publicly.</p>
+    {% if panorama %}
+    <div class="row" style="margin-bottom:8px">
+      <img src="{{url_for('static',filename=panorama.path)}}" alt="{{panorama.alt}}" width="180" style="border-radius:8px"><span>{{panorama.alt}}</span>
+      <form method="post" action="{{url_for('admin.room_panorama_delete',rid=r.id)}}" data-confirm="Delete this 360° panorama?"><input type="hidden" name="csrf_token" value="{{csrf_token()}}"><button class="btn sm danger">Delete panorama</button></form>
+    </div>
+    {% endif %}
+    <form method="post" action="{{url_for('admin.room_panorama_upload',rid=r.id)}}" enctype="multipart/form-data" class="row">
+      <input type="hidden" name="csrf_token" value="{{csrf_token()}}">
+      <label>Panorama (2:1 JPEG, PNG or WebP; up to 8 MB)<input type="file" name="panorama" accept="image/jpeg,image/png,image/webp" required></label>
+      <label>Description<input name="alt" maxlength="150" value="{{panorama.alt if panorama else '360-degree room panorama'}}"></label>
+      <button class="btn sm">Upload panorama</button>
+    </form>
+  </div>
+</div>
+<div class="card">
+  <h2>Block room (maintenance or hold)</h2>
+  <form method="post" action="{{url_for('admin.room_block',rid=r.id)}}" class="row">
+    <input type="hidden" name="csrf_token" value="{{csrf_token()}}">
+    <label>From<input type="date" name="start" required></label>
+    <label>Until (check-out day)<input type="date" name="end" required></label>
+    <label>Reason<input name="reason" value="Maintenance"></label><button class="btn sm">Block</button>
+  </form>
+  {% if blocks %}
+  <table class="t" style="margin-top:12px"><tr><th>Blocked night</th><th>Reason</th><th></th></tr>
+  {% for b in blocks %}<tr><td>{{b.night|dmy}}</td><td>{{b.reason}}</td><td><form method="post" action="{{url_for('admin.room_unblock',rid=r.id)}}"><input type="hidden" name="csrf_token" value="{{csrf_token()}}"><input type="hidden" name="night" value="{{b.night}}"><button class="btn sm plain">Unblock</button></form></td></tr>{% endfor %}
+  </table>
+  {% endif %}
+</div>
+{% endblock %}

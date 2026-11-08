@@ -1,6 +1,93 @@
-{% extends 'public/base.html' %}{% import 'public/_m.html' as m %}
-{% block title %}{{r.cat_name}} Room {{r.number}} | {{r.pname}}, Manpur Gaya{% endblock %}{% block desc %}{{r.cat_name}} room at {{r.pname}}, Manpur, Gaya from {{ price|inr }} per night. Amenities, photos and booking.{% endblock %}
-{% block content %}{% import 'public/_search.html' as s %}<section class="sec"><div class="wrap"><nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/rooms">Rooms</a><span aria-hidden="true">/</span><span>{{r.pname}}</span><span aria-hidden="true">/</span><span>{{r.cat_name}} · {{r.number}}</span></nav><div class="room-detail-layout"><div class="room-gallery">{% if r.images %}{{m.room_img(r,r.cat_name+' room '+r.number)}}{% elif r.cat_images %}<img src="{{url_for('static',filename=r.cat_images[0].path)}}" alt="{{r.cat_images[0].caption or r.cat_name}}" loading="lazy" width="800" height="600">{% else %}{{m.room_img(r,r.cat_name+' room '+r.number)}}{% endif %}{% for i in r.images[1:] %}<img src="{{ url_for('static',filename=i.path) }}" alt="{{i.alt or 'Room photo'}}" loading="lazy" width="800" height="600">{% endfor %}</div>
-<div class="room-detail-info"><span class="eyebrow">{{r.pname}} · {{'AC' if r.ac else 'Non-AC'}}</span><h1>{{r.cat_name}} · Room {{r.number}}</h1><p>{{r.description or r.cat_desc or 'See the listed room details and contact the property to confirm any specific requirement.'}}</p><div class="room-price"><strong>{{ price|inr }}</strong><span>per night · final total depends on dates and applicable tax</span></div><ul class="room-facts"><li>Up to {{r.max_adults}} adults</li><li>Up to {{r.max_children}} children</li><li>Arrival times confirmed with the property</li><li>Room amenities shown below are listing-specific</li></ul>
-{% if r.amenities %}<div class="room-amenities"><h2>Room amenities</h2><ul class="chips">{% for a in r.amenities %}<li>{{a}}</li>{% endfor %}</ul></div>{% endif %}
-<form class="form room-book-form" method="get" action="/book"><div class="form-heading full"><span class="eyebrow">Choose your stay</span><h2>Check dates and price</h2></div><input type="hidden" name="room_id" value="{{r.id}}"><input type="hidden" data-price-category value="{{r.category_id}}"><label>Check-in<input type="date" id="ci" name="ci" min="{{today}}" value="{{today}}" required></label><label>Check-out<input type="date" name="co" data-after="ci" min="{{tomorrow}}" value="{{tomorrow}}" required></label>{{s.calendar()}}<label>Adults<input type="number" name="adults" min="1" max="{{r.max_adults}}" value="2" required></label><label>Children<input type="number" name="children" min="0" max="{{r.max_children}}" value="0"></label><button class="btn full">Continue to guest details <span aria-hidden="true">→</span></button></form></div></div></div></section>{% endblock %}
+{% extends 'public/base.html' %}
+{% import 'public/_m.html' as m %}
+{% block title %}{{r.cat_name}} Room {{r.number}} | {{r.pname}}, Manpur Gaya{% endblock %}
+{% block desc %}{{r.cat_name}} room at {{r.pname}}, Manpur, Gaya from {{ price|inr }} per night. Complete room details, amenities, photos and booking.{% endblock %}
+{% block content %}
+{% import 'public/_search.html' as s %}
+<section class="sec">
+  <div class="wrap">
+    <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/rooms">Rooms</a><span aria-hidden="true">/</span><span>{{r.pname}}</span><span aria-hidden="true">/</span><span>{{r.cat_name}} · {{r.number}}</span></nav>
+    <div class="room-detail-layout">
+      <div class="room-gallery">
+        {% if r.images %}
+          {{m.room_img(r,r.cat_name+' room '+r.number)}}
+        {% elif r.cat_images %}
+          <img src="{{url_for('static',filename=r.cat_images[0].path)}}" alt="{{r.cat_images[0].caption or r.cat_name}}" loading="lazy" width="800" height="600">
+        {% else %}
+          {{m.room_img(r,r.cat_name+' room '+r.number)}}
+        {% endif %}
+        {% for i in r.images[1:] %}<img src="{{url_for('static',filename=i.path)}}" alt="{{i.alt or 'Room photo'}}" loading="lazy" width="800" height="600">{% endfor %}
+        <section class="room-panorama-section" aria-labelledby="room-panorama-title">
+          <h2 id="room-panorama-title">360° room view</h2>
+          {% if r.panorama %}
+          <div class="room-panorama" data-room-panorama aria-label="Interactive 360-degree room panorama. Drag to look around.">
+            <div class="room-panorama-track" data-panorama-track>
+              <img src="{{url_for('static',filename=r.panorama.path)}}" alt="{{r.panorama.alt}}" width="1600" height="800">
+              <img src="{{url_for('static',filename=r.panorama.path)}}" alt="" aria-hidden="true" width="1600" height="800">
+            </div>
+            <div class="room-panorama-controls">
+              <button type="button" data-panorama-prev aria-label="Look left">←</button>
+              <span>Drag or use arrows to look around</span>
+              <button type="button" data-panorama-next aria-label="Look right">→</button>
+              <button type="button" data-panorama-auto aria-pressed="false">Auto-rotate</button>
+            </div>
+          </div>
+          {% elif r.images|length>1 %}
+          <div class="room-panorama room-panorama-angles" data-room-panorama data-room-angle-view aria-label="Multi-angle room view using the available room photos.">
+            <div class="room-panorama-angle-list">
+              {% for image in r.images %}
+              <img src="{{url_for('static',filename=image.path)}}" alt="{{image.alt or r.cat_name+' room angle '+loop.index|string}}" width="800" height="600" data-room-angle {% if not loop.first %}hidden{% endif %}>
+              {% endfor %}
+            </div>
+            <div class="room-panorama-controls">
+              <button type="button" data-panorama-prev aria-label="Previous room angle">←</button>
+              <span><b data-panorama-count>1</b> / {{r.images|length}} angles · drag to rotate</span>
+              <button type="button" data-panorama-next aria-label="Next room angle">→</button>
+              <button type="button" data-panorama-auto aria-pressed="false">Auto-rotate</button>
+            </div>
+          </div>
+          <p class="room-panorama-caption">360°-style preview rotates through the available room photos; it is not a continuous stitched panorama.</p>
+          {% else %}
+          <div class="room-panorama-unavailable" role="note">A 360° panorama has not been uploaded for this room yet. The tour will appear here after the property team adds and approves a 2:1 panorama image.</div>
+          {% endif %}
+        </section>
+      </div>
+      <div class="room-detail-info">
+        <span class="eyebrow">{{r.pname}} · {{'AC' if r.ac else 'Non-AC'}}</span>
+        <h1>{{r.cat_name}} · Room {{r.number}}</h1>
+        <p>{{r.description or r.cat_desc or 'See the listed room details and contact the property to confirm any specific requirement.'}}</p>
+        <div class="room-price"><strong>{{price|inr}}</strong><span>per night · {% if tax_configured %}final total depends on dates and applicable tax{% else %}tax treatment pending management confirmation{% endif %}</span></div>
+        <h2 class="room-detail-heading">Complete room details</h2>
+        {% if r.cat_desc %}<p class="room-full-description">{{r.cat_desc}}</p>{% endif %}
+        <dl class="room-detail-list">
+          <div><dt>Property</dt><dd>{{r.pname}}{% if r.paddress %} · {{r.paddress}}{% endif %}</dd></div>
+          <div><dt>Room category</dt><dd>{{r.cat_name}}{% if r.room_type %} · {{r.room_type}}{% endif %}</dd></div>
+          <div><dt>Air conditioning</dt><dd>{{'Air-conditioned' if r.ac else 'Non-air-conditioned'}}</dd></div>
+          <div><dt>Room number</dt><dd>{{r.number}}</dd></div>
+          {% if r.floor %}<div><dt>Floor</dt><dd>{{r.floor}}</dd></div>{% endif %}
+          <div><dt>Maximum occupancy</dt><dd>{{r.max_adults}} adults{% if r.max_children %}, {{r.max_children}} children{% endif %}</dd></div>
+          {% if r.max_occupancy %}<div><dt>Total capacity</dt><dd>{{r.max_occupancy}} guests</dd></div>{% endif %}
+        </dl>
+        {% if r.amenities %}
+        <div class="room-amenities"><h2>Room amenities and facilities</h2><ul class="chips">{% for a in r.amenities %}<li>{{a}}</li>{% endfor %}</ul></div>
+        {% endif %}
+        {% if tax_configured %}
+        <form class="form room-book-form" method="get" action="/book">
+          <div class="form-heading full"><span class="eyebrow">Choose your stay</span><h2>Check dates and price</h2></div>
+          <input type="hidden" name="room_id" value="{{r.id}}"><input type="hidden" data-price-category value="{{r.category_id}}">
+          <label>Check-in<input type="date" id="ci" name="ci" min="{{today}}" value="{{today}}" required></label>
+          <label>Check-out<input type="date" name="co" data-after="ci" min="{{tomorrow}}" value="{{tomorrow}}" required></label>
+          {{s.calendar()}}
+          <label>Adults<input type="number" name="adults" min="1" max="{{r.max_adults}}" value="2" required></label>
+          <label>Children<input type="number" name="children" min="0" max="{{r.max_children}}" value="0"></label>
+          <button class="btn full">Continue to guest details <span aria-hidden="true">→</span></button>
+        </form>
+        {% else %}
+        <aside class="availability-guidance tax-pending-notice" role="status">Online booking is paused until management confirms the applicable tax treatment. <a href="/contact?kind=room#enquiry">Contact the property team to enquire</a>.</aside>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}<script src="{{url_for('static',filename='js/panorama.js')}}" defer></script>{% endblock %}

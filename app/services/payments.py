@@ -18,6 +18,7 @@ def _txn(db,pid,kind,amount=None,ref=None,payload=None):
 def create_order(db,rid):
     res=B.get_res(db,rid)
     if res['status']!='pending':raise PaymentError('This booking is not awaiting payment.')
+    if not B.tax_configuration(db,res['category_id'])[1]:raise PaymentError('Online payments are disabled until management confirms the applicable tax setting.')
     pct=int(setting(db,'advance_percent','100'));due=B.outstanding(db,rid);amt=max(100,round(due*pct/100))
     if amt>due:amt=due
     if amt<=0:raise PaymentError('Nothing is due on this booking.')

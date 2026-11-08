@@ -43,7 +43,7 @@ class DynamicPricingTests(Base):
     def test_seasonal_rate_is_dynamic_base(self):
         self.enable()
         saturday = future_weekday(5)
-        self.db.execute('INSERT INTO pricing_rules(category_id,label,start_date,end_date,price_paise) VALUES(?,?,?,?,?)',
+        self.db.execute('INSERT INTO pricing_rules(category_id,label,start_date,end_date,price_paise,approved) VALUES(?,?,?,?,?,1)',
                         (1, 'Peak season', saturday, saturday, 300000))
         self.add_rule('weekend', 10, dow='5,6')
         room = self.db.execute(B.ROOM_SQL + ' AND r.id=?', (1,)).fetchone()
@@ -52,7 +52,7 @@ class DynamicPricingTests(Base):
     def test_room_override_precedes_seasonal_rate(self):
         self.enable()
         saturday = future_weekday(5)
-        self.db.execute('INSERT INTO pricing_rules(category_id,label,start_date,end_date,price_paise) VALUES(?,?,?,?,?)',
+        self.db.execute('INSERT INTO pricing_rules(category_id,label,start_date,end_date,price_paise,approved) VALUES(?,?,?,?,?,1)',
                         (1, 'Peak season', saturday, saturday, 300000))
         self.db.execute('UPDATE rooms SET price_override_paise=? WHERE id=1', (350000,))
         self.add_rule('weekend', 10, dow='5')
