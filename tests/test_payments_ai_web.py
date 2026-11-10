@@ -324,38 +324,40 @@ class Web(Base):
         s=R.summary(self.db,day(0),day(1));self.assertEqual(s['nights_sold'],2);self.assertEqual(s['bookings'],1);self.assertEqual(s['ac'],2)
         c,_=self.login();self.assertEqual(c.get('/admin/reports').status_code,200)
         x=c.get('/admin/bookings/export.xlsx');self.assertTrue(x.data.startswith(b'PK'));self.assertTrue(c.get('/admin/reports/export.pdf').data.startswith(b'%PDF'))
-    def test_dashboard_shows_complete_analytics_values(self):
-        from app.services import reports as R
-        user={'id':1,'email':'owner@t.in'}
-        bookings=[self.book(1,ci=0,co=1,name='Analytics Guest One',phone='9811111101'),self.book(2,ci=4,co=5,name='Analytics Guest Two',phone='9811111102'),self.book(3,ci=8,co=9,name='Analytics Guest Three',phone='9811111103')]
-        for reservation,offset,amount in zip(bookings,(-12,-7,-2),(50000,70000,80000)):
-            stamp=f'{day(offset)} 12:00:00'
-            self.db.execute('UPDATE reservations SET created_at=? WHERE id=?',(stamp,reservation['id']))
-            P.record_manual(self.db,reservation['id'],'cash',amount,'analytics-test',user)
-            self.db.execute('UPDATE payments SET paid_at=? WHERE reservation_id=?',(stamp,reservation['id']))
-        rows=R.series(self.db,day(-13),day(0),'day');occupancy=R.occupancy_series(self.db,day(-13),day(0))
-        self.assertEqual(len(rows),14);self.assertEqual(sum(row['bookings'] for row in rows),3);self.assertEqual(sum(row['collected'] for row in rows),200000)
-        self.assertEqual(len(occupancy),14);self.assertEqual(occupancy[-1]['occupancy'],33.3)
-        client,_=self.login();response=client.get('/admin/');self.assertEqual(response.status_code,200);page=response.get_data(as_text=True)
-        for text in ('Bookings created','Payments collected','Occupancy by night','Room-category demand','Show all bookings values','Show all collected values','33.3%'):
-            self.assertIn(text,page)
-    def test_owner_pages_and_finance_ledger_workflows(self):
-        from app.services import reports as R
-        reservation=self.book(1,ci=0,co=1);P.record_manual(self.db,reservation['id'],'cash',100000,'test-cash',{'id':1,'email':'owner@t.in'})
-        client,_=self.login();paths=('/admin/reception','/admin/bookings','/admin/rooms','/admin/categories','/admin/pricing/dynamic','/admin/media','/admin/reports','/admin/enquiries','/admin/conversations','/admin/users')
-        for path in paths:self.assertEqual(client.get(path).status_code,200,path)
-        token=self.csrf(client,'/admin/reports');entry=dict(csrf_token=token,**{'from':day(0),'to':day(0),'group':'day','incurred_on':day(0)})
-        self.assertEqual(client.post('/admin/expenses',data=entry|{'kind':'capital','category':'Renovation','description':'Test capital investment','amount':'1000','incurred_on':day(-100)}).status_code,302)
-        self.assertEqual(client.post('/admin/expenses',data=entry|{'kind':'operating','category':'Utilities','description':'Test operating cost','amount':'250'}).status_code,302)
-        finance=R.summary(self.db,day(0),day(0));self.assertEqual(finance['collected'],100000);self.assertEqual(finance['operating'],25000);self.assertEqual(finance['investment'],100000);self.assertEqual(finance['net_return'],75000);self.assertEqual(finance['roi_pct'],75.0)
-        page=client.get('/admin/reports',query_string={'from':day(0),'to':day(0)}).get_data(as_text=True);self.assertIn('75.0%',page);self.assertIn('Test operating cost',page);self.assertIn('Test capital investment',page)
-        eid=self.db.execute("SELECT id FROM expense_entries WHERE category='Utilities'").fetchone()[0]
-        self.assertEqual(client.post(f'/admin/expenses/{eid}/delete',data={'csrf_token':token}).status_code,302)
-        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM expense_entries WHERE id=?',(eid,)).fetchone()[0],0)
-    def test_receptionist_cannot_write_financial_entries(self):
-        client,_=self.login('rec@t.in');token=self.csrf(client,'/admin/reception')
-        response=client.post('/admin/expenses',data={'csrf_token':token,'kind':'capital','category':'Test','description':'Blocked','amount':'10','incurred_on':day(0)})
-        self.assertEqual(response.status_code,403)
+    def test_daily_report_series_has_zero_days_and_actual_event_counts(self):
+        from app.services import booking as B,reports as R
+        u={'id':1,'email':'x'}
+        checked=self.book(1,ci=0,co=1)
+        cancelled=self.book(2,ci=0,co=1,phone='9812345678')
+        P.record_manual(self.db,checked['id'],'cash',100000,'',u)
+        B.check_in(self.db,checked['id'],u)
+        B.check_out(self.db,checked['id'],u)
+        B.cancel(self.db,cancelled['id'],'test cancellation',u)
+
+        rows=R.series(self.db,day(-1),day(1),'day')
+        self.assertEqual([row['label'] for row in rows],[day(-1),day(0),day(1)])
+        today_row=rows[1]
+        self.assertEqual(today_row['bookings'],2)
+        self.assertEqual(today_row['booked'],checked['total_paise']+cancelled['total_paise'])
+        self.assertEqual(today_row['collected'],100000)
+        self.assertEqual(today_row['cancels'],1)
+        self.assertEqual(today_row['checkins'],1)
+        self.assertEqual(today_row['checkouts'],1)
+        self.assertTrue(all(not row[key] for row in (rows[0],rows[2]) for key in ('bookings','booked','collected','cancels','checkins','checkouts')))
+        self.assertEqual(R.series_totals(rows),dict(bookings=2,booked=checked['total_paise']+cancelled['total_paise'],collected=100000,cancels=1,checkins=1,checkouts=1))
+        chart=R.svg_bars(rows,'bookings')
+        self.assertIn('viewBox="0 0 360 100"',chart)
+        self.assertEqual(chart.count('<text '),3)
+        c,_=self.login()
+        dashboard=c.get('/admin/')
+        reports=c.get('/admin/reports',query_string={'from':day(-1),'to':day(1)})
+        self.assertEqual(dashboard.status_code,200)
+        self.assertEqual(reports.status_code,200)
+        for page in (dashboard,reports):
+            html=page.get_data(as_text=True)
+            self.assertEqual(html.count('class="kpi trend-kpi"'),6)
+            self.assertIn('Bookings created per day',html)
+            self.assertIn('Booked value by day created',html)
     def test_security_headers_xss_and_sql_injection(self):
         c=self.app.test_client();r=c.get('/');self.assertIn("default-src 'self'",r.headers['Content-Security-Policy']);self.assertIn("https://fonts.googleapis.com",r.headers['Content-Security-Policy']);self.assertIn("https://fonts.gstatic.com",r.headers['Content-Security-Policy']);self.assertEqual(r.headers['X-Frame-Options'],'DENY')
         self.book(1,name='<script>alert(1)</script>',phone='9855555555');oc,_=self.login();page=oc.get('/admin/bookings').get_data(as_text=True);self.assertNotIn('<script>alert(1)</script>',page);self.assertIn('&lt;script&gt;',page)

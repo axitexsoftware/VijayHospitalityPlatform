@@ -1,0 +1,17 @@
+{% set metrics = [
+  ('bookings', 'Bookings created', '#8F1D1E', false),
+  ('collected', 'Collected', '#EC6A24', true),
+  ('booked', 'Booked value by ' ~ period ~ ' created', '#5c1012', true),
+  ('cancels', 'Cancellations', '#b3261e', false),
+  ('checkins', 'Check-ins', '#2956a8', false),
+  ('checkouts', 'Check-outs', '#17803d', false)
+] %}
+<div class="kpis trend-kpis">
+{% for key,label,color,money in metrics %}
+<div class="kpi trend-kpi" style="--trend-color:{{ color }}">
+  <div class="trend-chart">{{ svg(ser,key,color,money) }}</div>
+  <b>{{ kpi_totals[key]|inr if money else kpi_totals[key] }}</b>
+  <span>{{ label }}{% if key != 'booked' %} per {{ period }}{% endif %}</span>
+</div>
+{% endfor %}
+</div>

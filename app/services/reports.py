@@ -16,45 +16,34 @@ def dashboard(db):
      pending_pay=one(db,"SELECT COUNT(*) FROM reservations WHERE status='pending'"),rev_day=rev(t),rev_month=rev(m),rev_year=rev(y),
      demand=[dict(r) for r in db.execute(f"SELECT c.name,COUNT(*) nights FROM room_nights n JOIN reservations s ON s.id=n.reservation_id AND s.status IN{LIVE} JOIN rooms r ON r.id=n.room_id JOIN room_categories c ON c.id=r.category_id WHERE n.night>=? GROUP BY c.name ORDER BY nights DESC",((today()-dtm.timedelta(days=30)).isoformat(),))])
 def _n(group):return {'day':10,'month':7,'year':4}[group]
-def series(db,start,end,group='day'):
-    n=_n(group);out={}
-    def put(k,f,v):out.setdefault(k,dict(label=k,bookings=0,booked=0,collected=0,cancels=0,checkins=0,checkouts=0))[f]+=v
-    first=dtm.date.fromisoformat(start);last=dtm.date.fromisoformat(end)
+def _periods(start,end,group):
+    a=d(start);b=d(end)
+    if b<a:raise ValueError('End date must be on or after start date.')
     if group=='day':
-        current=first
+        return [(a+dtm.timedelta(days=i)).isoformat() for i in range((b-a).days+1)]
+    if group=='month':
+        current=a.replace(day=1);last=b.replace(day=1);periods=[]
         while current<=last:
-            put(current.isoformat(),'bookings',0);current+=dtm.timedelta(days=1)
-    elif group=='month':
-        current=first.replace(day=1);last=last.replace(day=1)
-        while current<=last:
-            put(current.strftime('%Y-%m'),'bookings',0)
-            current=dtm.date(current.year+(current.month==12),current.month%12+1,1)
-    else:
-        for year in range(first.year,last.year+1):put(str(year),'bookings',0)
-    for r in db.execute(f"SELECT substr(created_at,1,{n}) k,COUNT(*) c,SUM(CASE WHEN status IN{LIVE} THEN total_paise ELSE 0 END) v FROM reservations WHERE substr(created_at,1,10) BETWEEN ? AND ? GROUP BY k",(start,end)):put(r['k'],'bookings',r['c']);put(r['k'],'booked',r['v'] or 0)
+            periods.append(current.strftime('%Y-%m'))
+            current=(current.replace(year=current.year+1,month=1) if current.month==12
+                     else current.replace(month=current.month+1))
+        return periods
+    if group=='year':
+        return [str(year) for year in range(a.year,b.year+1)]
+    raise ValueError('Unsupported report grouping.')
+def series(db,start,end,group='day'):
+    n=_n(group);out={k:dict(label=k,bookings=0,booked=0,collected=0,cancels=0,checkins=0,checkouts=0) for k in _periods(start,end,group)}
+    def put(k,f,v):
+        if k in out:out[k][f]+=v
+    for r in db.execute(f"SELECT substr(created_at,1,{n}) k,COUNT(*) c,SUM(total_paise) v FROM reservations WHERE substr(created_at,1,10) BETWEEN ? AND ? GROUP BY k",(start,end)):put(r['k'],'bookings',r['c']);put(r['k'],'booked',r['v'] or 0)
     for r in db.execute(f"SELECT substr(paid_at,1,{n}) k,SUM(amount_paise-refunded_paise) v FROM payments WHERE status IN('paid','partially_refunded','refunded') AND substr(paid_at,1,10) BETWEEN ? AND ? GROUP BY k",(start,end)):put(r['k'],'collected',r['v'] or 0)
     for r in db.execute(f"SELECT substr(at,1,{n}) k,COUNT(*) c FROM cancellations WHERE substr(at,1,10) BETWEEN ? AND ? GROUP BY k",(start,end)):put(r['k'],'cancels',r['c'])
-    for r in db.execute(f"SELECT substr(check_in,1,{n}) k,COUNT(*) c FROM reservations WHERE status IN{LIVE} AND check_in BETWEEN ? AND ? GROUP BY k",(start,end)):put(r['k'],'checkins',r['c'])
-    for r in db.execute(f"SELECT substr(check_out,1,{n}) k,COUNT(*) c FROM reservations WHERE status IN{LIVE} AND check_out BETWEEN ? AND ? GROUP BY k",(start,end)):put(r['k'],'checkouts',r['c'])
+    for r in db.execute(f"SELECT substr(at,1,{n}) k,COUNT(*) c FROM checkins WHERE substr(at,1,10) BETWEEN ? AND ? GROUP BY k",(start,end)):put(r['k'],'checkins',r['c'])
+    for r in db.execute(f"SELECT substr(at,1,{n}) k,COUNT(*) c FROM checkouts WHERE substr(at,1,10) BETWEEN ? AND ? GROUP BY k",(start,end)):put(r['k'],'checkouts',r['c'])
     return [out[k] for k in sorted(out)]
-def occupancy_series(db,start,end):
-    rooms=one(db,"SELECT COUNT(*) FROM rooms WHERE status='active'")
-    counts={r['night']:r['occupied'] for r in db.execute(f"SELECT n.night,COUNT(DISTINCT n.room_id) occupied FROM room_nights n JOIN reservations s ON s.id=n.reservation_id AND s.status IN{LIVE} JOIN rooms r ON r.id=n.room_id AND r.status='active' WHERE n.night BETWEEN ? AND ? GROUP BY n.night",(start,end))}
-    current=dtm.date.fromisoformat(start);last=dtm.date.fromisoformat(end);out=[]
-    while current<=last:
-        night=current.isoformat();occupied=counts.get(night,0)
-        out.append(dict(label=night,occupancy=round(occupied/rooms*100,1) if rooms else 0,occupied=occupied,rooms=rooms))
-        current+=dtm.timedelta(days=1)
-    return out
-def financial_period(db,start,end,collected=None):
-    if collected is None:
-        collected=one(db,"SELECT COALESCE(SUM(amount_paise-refunded_paise),0) FROM payments WHERE status IN('paid','partially_refunded','refunded') AND substr(paid_at,1,10) BETWEEN ? AND ?",(start,end))
-    operating=one(db,"SELECT COALESCE(SUM(amount_paise),0) FROM expense_entries WHERE kind='operating' AND incurred_on BETWEEN ? AND ?",(start,end))
-    investment=one(db,"SELECT COALESCE(SUM(amount_paise),0) FROM expense_entries WHERE kind='capital' AND incurred_on<=?",(end,))
-    net=collected-operating
-    return dict(collected=collected,operating=operating,investment=investment,net_return=net,roi_pct=round(net/investment*100,1) if investment else None)
-def expense_rows(db,start,end,limit=200):
-    return [dict(r) for r in db.execute("SELECT e.*,u.name created_by_name FROM expense_entries e LEFT JOIN users u ON u.id=e.created_by WHERE (e.kind='operating' AND e.incurred_on BETWEEN ? AND ?) OR (e.kind='capital' AND e.incurred_on<=?) ORDER BY e.incurred_on DESC,e.id DESC LIMIT ?",(start,end,end,limit))]
+def series_totals(data):
+    keys=('bookings','booked','collected','cancels','checkins','checkouts')
+    return {key:sum(row[key] for row in data) for key in keys}
 def summary(db,start,end):
     a=d(start);b=d(end);days=(b-a).days+1;rooms=one(db,"SELECT COUNT(*) FROM rooms WHERE status='active'")
     sold=one(db,f"SELECT COUNT(*) FROM room_nights n JOIN reservations s ON s.id=n.reservation_id WHERE s.status IN{LIVE} AND n.night BETWEEN ? AND ?",(start,end))
@@ -103,10 +92,24 @@ def pdf(rows,title):
         for v,x in zip([r['ref'],r['cname'][:22],r['rnumber'],r['check_in'],r['check_out'],r['status'],f"{r['total_paise']/100:,.0f}",f"{r['paid_paise']/100:,.0f}"],[30,100,230,270,340,410,500,570]):c.drawString(x,y,str(v))
         y-=11
     c.save();return b.getvalue()
-def svg_bars(data,key,color='#8F1D1E',money=False,h=150):
+def svg_bars(data,key,color='#8F1D1E',money=False):
     if not data:return Markup('<p class="muted">No data for this period.</p>')
-    mx=max([x[key] for x in data]+[1]);w=max(320,len(data)*38);bw=w/len(data);o=[f'<svg viewBox="0 0 {w} {h+34}" role="img" aria-label="{key} chart" style="width:100%;height:auto">']
+    w=360;base=72;plot_h=58;plot_x=18;plot_w=324;step=plot_w/len(data);bar_w=min(16,step*.62);mx=max([x[key] for x in data]+[1])
+    o=[f'<svg viewBox="0 0 {w} 100" role="img" aria-label="{key} chart" preserveAspectRatio="none">']
+    for y in (14,43,base):
+        stroke='#e8dfd0' if y!=base else '#d8cec0';width=1.2 if y==base else 1
+        o.append(f'<path d="M8 {y}H352" fill="none" stroke="{stroke}" stroke-width="{width}"/>')
     for i,x in enumerate(data):
-        v=x[key];bh=v/mx*h;val=f"{v/100:,.0f}" if money else str(v)
-        o.append(f'<rect x="{i*bw+6}" y="{h-bh+10}" width="{bw-12}" height="{bh}" rx="4" fill="{color}"><title>{x["label"]}: {val}</title></rect><text x="{i*bw+bw/2}" y="{h-bh+7}" font-size="8" text-anchor="middle" fill="currentColor">{val}</text><text x="{i*bw+bw/2}" y="{h+26}" font-size="9" text-anchor="middle" fill="currentColor">{x["label"][-5:] if len(x["label"])>7 else x["label"]}</text>')
+        v=x[key];cx=plot_x+step*(i+.5);bh=v/mx*plot_h
+        if v:
+            val=f"₹{v/100:,.0f}" if money else str(v)
+            o.append(f'<rect x="{cx-bar_w/2:.2f}" y="{base-bh:.2f}" width="{bar_w:.2f}" height="{bh:.2f}" rx="3" fill="{color}" fill-opacity=".88"><title>{x["label"]}: {val}</title></rect>')
+    ticks=(range(len(data)) if len(data)<=6
+           else sorted({round(i*(len(data)-1)/5) for i in range(6)}))
+    for i in ticks:
+        label=data[i]['label']
+        if len(label)==10:label=dtm.date.fromisoformat(label).strftime('%d %b')
+        elif len(label)==7:label=dtm.datetime.strptime(label,'%Y-%m').strftime('%b %y')
+        cx=plot_x+step*(i+.5)
+        o.append(f'<text x="{cx:.2f}" y="94" font-size="9" text-anchor="middle" fill="#746b64">{label}</text>')
     o.append('</svg>');return Markup(''.join(o))

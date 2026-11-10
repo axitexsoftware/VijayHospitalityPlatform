@@ -31,14 +31,8 @@ def logout():session.clear();return redirect(url_for('admin.login'))
 def dashboard():
     db=get_db();B.expire_holds(db);t=today().isoformat()
     ar=R.booking_rows(db,status='confirmed',ci_from=t,ci_to=t);dp=R.booking_rows(db,status='checked_in',limit=200);dp=[r for r in dp if r['check_out']==t]
-    start=(today()-dtm.timedelta(days=13)).isoformat();ser=R.series(db,start,t,'day');occ=R.occupancy_series(db,start,t)
-    k=R.dashboard(db);k['new_enquiries']=db.execute("SELECT COUNT(*) FROM guest_enquiries WHERE status='new'").fetchone()[0];demand_max=max((x['nights'] for x in k['demand']),default=0)
-    try:map_date=dtm.date.fromisoformat(request.args.get('date',''))
-    except ValueError:map_date=today()
-    if map_date<today():map_date=today()
-    map_on=map_date.isoformat();month_on=map_date.replace(day=1).isoformat();year_on=map_date.replace(month=1,day=1).isoformat()
-    finance={'day':R.financial_period(db,map_on,map_on),'month':R.financial_period(db,month_on,map_on),'year':R.financial_period(db,year_on,map_on)}
-    return render_template('admin/dashboard.html',k=k,arr=ar,dep=dp,ser=ser,occ=occ,demand_max=demand_max,svg=R.svg_bars,finance=finance,map_date=map_on,today=t,room_map=B.room_status_board(db,map_on),upcoming=R.booking_rows(db,status='confirmed',ci_from=(today()+dtm.timedelta(days=1)).isoformat(),limit=8))
+    ser=R.series(db,(today()-dtm.timedelta(days=13)).isoformat(),t,'day')
+    return render_template('admin/dashboard.html',k=R.dashboard(db),arr=ar,dep=dp,ser=ser,kpi_totals=R.series_totals(ser),period='day',svg=R.svg_bars,upcoming=R.booking_rows(db,status='confirmed',ci_from=(today()+dtm.timedelta(days=1)).isoformat(),limit=8))
 # ---- rooms & categories
 @bp.get('/rooms')
 @require('rooms')
@@ -738,9 +732,11 @@ def reception():
 @require('reports')
 def reports():
     db=get_db();a=request.args;end=a.get('to') or today().isoformat();start=a.get('from') or (today()-dtm.timedelta(days=29)).isoformat();grp=a.get('group','day') if a.get('group') in('day','month','year') else 'day'
-    try:d(start);d(end)
+    try:
+        if d(start)>d(end):raise ValueError
     except Exception:flash('Choose valid dates.','error');start=(today()-dtm.timedelta(days=29)).isoformat();end=today().isoformat()
-    return render_template('admin/reports.html',s=R.summary(db,start,end),ser=R.series(db,start,end,grp),expenses=R.expense_rows(db,start,end),start=start,end=end,grp=grp,today=today().isoformat(),svg=R.svg_bars)
+    ser=R.series(db,start,end,grp)
+    return render_template('admin/reports.html',s=R.summary(db,start,end),ser=ser,kpi_totals=R.series_totals(ser),start=start,end=end,grp=grp,period=grp,svg=R.svg_bars)
 @bp.get('/reports/export.<fmt>')
 @require('reports')
 def reports_export(fmt):
