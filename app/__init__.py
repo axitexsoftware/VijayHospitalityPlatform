@@ -2,11 +2,12 @@ import os,logging
 from logging.handlers import RotatingFileHandler
 from flask import Flask,Request,render_template,request,g,session,current_app
 from . import config as cfgmod,db as dbm,security
-from .util import inr,d
+from .util import inr,d,today
 class HospitalityRequest(Request):
     @property
     def max_content_length(self):
         if self.path=='/admin/media/upload':return 65*1024*1024
+        if self.path.startswith('/admin/rooms/') and self.path.endswith('/panorama'):return 9*1024*1024
         return current_app.config.get('MAX_CONTENT_LENGTH')
 def create_app(**over):
     app=Flask(__name__,instance_relative_config=False);app.request_class=HospitalityRequest;app.config.update(cfgmod.load(**over));app.config['CSRF_EXEMPT']={'api.payment_webhook'}
@@ -26,7 +27,7 @@ def create_app(**over):
     @app.context_processor
     def inject():
         from .payments_ui import razorpay_ready
-        return dict(user=getattr(g,'user',None),razorpay_ready=razorpay_ready())
+        return dict(user=getattr(g,'user',None),razorpay_ready=razorpay_ready(),today=today().isoformat(),tomorrow=(today()+__import__('datetime').timedelta(days=1)).isoformat())
     @app.errorhandler(404)
     def e404(e):return render_template('public/error.html',code=404,msg='Page not found'),404
     @app.errorhandler(403)

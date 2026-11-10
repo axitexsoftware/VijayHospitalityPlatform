@@ -1,5 +1,94 @@
-{% extends 'admin/base.html' %}{% block title %}Categories and rates{% endblock %}
-{% block content %}<h1>Room categories and rates</h1><div class="card"><h2>Add a category</h2><form method="post" class="row"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label>Property<select name="property_id">{% for p in props %}<option value="{{p.id}}">{{p.name}}</option>{% endfor %}</select></label><label>Name<input name="name" required></label><label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" name="ac" checked> Air-conditioned</label><label>Rate per night (₹)<input name="price" type="number" min="1" required></label><label>Max adults<input name="max_adults" type="number" min="1" value="2" style="width:70px"></label><label>Max children<input name="max_children" type="number" min="0" value="1" style="width:70px"></label><label>Description<input name="description" size="28"></label><button class="btn sm">Add</button></form></div>
-{% for c in cats %}<form class="card row" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="id" value="{{c.id}}"><strong style="width:100%">{{c.pname}}</strong><label>Name<input name="name" value="{{c.name}}" required></label><label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" name="ac" {{'checked' if c.ac}}> AC</label><label>Rate (₹)<input name="price" type="number" min="0" value="{{ c.base_price_paise//100 }}"></label><label>Adults<input name="max_adults" type="number" value="{{c.max_adults}}" style="width:70px"></label><label>Children<input name="max_children" type="number" value="{{c.max_children}}" style="width:70px"></label><label>Description<input name="description" value="{{c.description or ''}}" size="28"></label><label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" name="active" {{'checked' if c.active}}> Active</label><button class="btn sm">Save</button></form>{% endfor %}
-<div class="card"><h2>Seasonal rates</h2><form method="post" action="{{ url_for('admin.pricing_add') }}" class="row"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label>Category<select name="category_id">{% for c in cats %}<option value="{{c.id}}">{{c.pname}}: {{c.name}}</option>{% endfor %}</select></label><label>Label<input name="label" placeholder="Wedding season"></label><label>From<input type="date" name="start" required></label><label>To (inclusive)<input type="date" name="end" required></label><label>Rate (₹)<input type="number" name="price" min="1" required></label><button class="btn sm">Add rate</button></form>
-<table class="t" style="margin-top:12px"><tr><th>Category</th><th>Label</th><th>From</th><th>To</th><th>Rate</th><th></th></tr>{% for x in rules %}<tr><td>{{x.cat}}</td><td>{{x.label}}</td><td>{{x.start_date|dmy}}</td><td>{{x.end_date|dmy}}</td><td>{{x.price_paise|inr}}</td><td><form method="post" action="{{ url_for('admin.pricing_delete',xid=x.id) }}" data-confirm="Delete this rate?"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn sm plain">Delete</button></form></td></tr>{% else %}<tr><td colspan="6" class="muted">No seasonal rates.</td></tr>{% endfor %}</table></div>{% endblock %}
+{% extends 'admin/base.html' %}
+{% block title %}Categories and rates{% endblock %}
+{% block content %}
+<h1>Room categories and rates</h1>
+<p><a class="btn sm plain" href="{{url_for('admin.inventory_setup')}}">Review real inventory setup</a></p>
+
+<section class="card tax-config-card">
+  <h2>Tax configuration</h2>
+  <p class="muted">This percentage is applied to room charges across properties. Leave it unconfirmed until management approves the correct tax treatment. Online bookings are blocked while tax is unconfirmed.</p>
+  <form method="post" action="{{url_for('admin.tax_settings')}}" class="row">
+    <input type="hidden" name="csrf_token" value="{{csrf_token()}}">
+    <label>Tax percentage<input name="tax_percent" type="number" min="0" max="100" step="0.01" value="{{tax_percent}}" placeholder="Leave blank while pending"></label>
+    <label class="tax-confirm-label"><input type="checkbox" name="confirm_tax" value="1" {{'checked' if tax_confirmed}}> I confirm management approved this tax percentage</label>
+    <button class="btn sm" type="submit">Save tax setting</button>
+  </form>
+  <p class="tax-config-status {{'confirmed' if tax_confirmed else 'pending'}}" role="status">{% if tax_confirmed %}Confirmed tax: {{tax_percent}}%.{% else %}Tax is not confirmed. No assumed tax will be applied; booking actions stay disabled.{% endif %}</p>
+</section>
+
+<section class="card">
+  <h2>Add a category</h2>
+  <form method="post" class="row">
+    <input type="hidden" name="csrf_token" value="{{csrf_token()}}">
+    <label>Property<select name="property_id">{% for p in props %}<option value="{{p.id}}">{{p.name}}</option>{% endfor %}</select></label>
+    <label>Display name<input name="name" required></label>
+    <label>Room type<input name="room_type" placeholder="Management-confirmed type" required></label>
+    <label class="check-label"><input type="checkbox" name="ac" checked> Air-conditioned</label>
+    <label>Base nightly rate (₹)<input name="price" type="number" min="0.01" step="0.01" placeholder="Pending"></label>
+    <label>Maximum adults<input name="max_adults" type="number" min="1" max="12" placeholder="Pending"></label>
+    <label>Maximum children<input name="max_children" type="number" min="0" max="12" placeholder="Pending"></label>
+    <label>Maximum total occupancy<input name="max_occupancy" type="number" min="1" max="24" placeholder="Pending"></label>
+    <label>Category tax (%)<input name="tax_percent" type="number" min="0" max="100" step="0.01" placeholder="Use approved property tax"></label>
+    <label>Description<input name="description" size="28"></label>
+    <button class="btn sm">Save pending category</button>
+  </form>
+  <p class="muted">Missing values remain pending. A category is not shown to guests until management approves its details, active room inventory, occupancy, rates and tax.</p>
+</section>
+
+{% for c in cats %}
+<section class="card inventory-category-card">
+<form class="row" method="post">
+  <input type="hidden" name="csrf_token" value="{{csrf_token()}}">
+  <input type="hidden" name="id" value="{{c.id}}">
+  <strong class="category-property">{{c.pname}}</strong>
+  <label>Display name<input name="name" value="{{c.name}}" required></label>
+  <label>Room type<input name="room_type" value="{{c.room_type or ''}}" placeholder="Pending" required></label>
+  <label class="check-label"><input type="checkbox" name="ac" {{'checked' if c.ac}}> AC</label>
+  <label>Base nightly rate (₹)<input name="price" type="number" min="0.01" step="0.01" value="{{'%.2f'|format(c.nightly_rate_paise/100) if c.nightly_rate_paise else ''}}" placeholder="Pending"></label>
+  <label>Maximum adults<input name="max_adults" type="number" min="1" max="12" value="{{c.max_adults_approved or ''}}" placeholder="Pending"></label>
+  <label>Maximum children<input name="max_children" type="number" min="0" max="12" value="{{c.max_children_approved if c.max_children_approved is not none else ''}}" placeholder="Pending"></label>
+  <label>Maximum total occupancy<input name="max_occupancy" type="number" min="1" max="24" value="{{c.max_occupancy or ''}}" placeholder="Pending"></label>
+  <label>Category tax (%)<input name="tax_percent" type="number" min="0" max="100" step="0.01" value="{{c.tax_percent if c.tax_percent is not none else ''}}" placeholder="Use approved property tax"></label>
+  <label>Description<input name="description" value="{{c.description or ''}}" size="28"></label>
+  <label class="check-label"><input type="checkbox" name="active" {{'checked' if c.active}}> Active</label>
+  <button class="btn sm">Save as pending</button>
+</form>
+<div class="inventory-review-tax">
+  <p><strong>Current inventory:</strong> {{c.inventory_count}} active room{{'' if c.inventory_count==1 else 's'}} · <strong>Approved photographs:</strong> {{c.photo_count if c.photos_status=='approved' else 0}}</p>
+  <p class="tax-config-status {{'confirmed' if c.publication_status=='published' else 'pending'}}" role="status">Publication: {{c.publication_status}} · Details: {{c.details_status}} · Inventory: {{c.inventory_status}} · Occupancy: {{c.occupancy_status}} · Rates: {{c.rates_status}} · Tax: {{c.tax_status}} · Photos: {{c.photos_status}}</p>
+  <form method="post" action="{{url_for('admin.category_approval',category_id=c.id)}}" class="inventory-tax-fields">
+    <input type="hidden" name="csrf_token" value="{{csrf_token()}}">
+    <label class="tax-confirm-label"><input type="checkbox" name="approve_details" value="1" {{'checked' if c.details_status=='approved'}}> Approve room details</label>
+    <label class="tax-confirm-label"><input type="checkbox" name="approve_inventory" value="1" {{'checked' if c.inventory_status=='approved'}}> Approve active room inventory</label>
+    <label class="tax-confirm-label"><input type="checkbox" name="approve_occupancy" value="1" {{'checked' if c.occupancy_status=='approved'}}> Approve occupancy limits</label>
+    <label class="tax-confirm-label"><input type="checkbox" name="approve_rates" value="1" {{'checked' if c.rates_status=='approved'}}> Approve category and seasonal rates</label>
+    <label class="tax-confirm-label"><input type="checkbox" name="approve_tax" value="1" {{'checked' if c.tax_status=='approved'}}> Approve category/property tax</label>
+    <label class="tax-confirm-label"><input type="checkbox" name="approve_photos" value="1" {{'checked' if c.photos_status=='approved'}}> Approve uploaded room photos</label>
+    <label class="tax-confirm-label"><input type="checkbox" name="publish" value="1" {{'checked' if c.publication_status=='published'}}> Publish to the customer website</label>
+    <button class="btn sm">Save approvals</button>
+  </form>
+</div>
+</section>
+{% endfor %}
+
+<section class="card">
+  <h2>Seasonal rates</h2>
+  <form method="post" action="{{url_for('admin.pricing_add')}}" class="row">
+    <input type="hidden" name="csrf_token" value="{{csrf_token()}}">
+    <label>Category<select name="category_id">{% for c in cats %}<option value="{{c.id}}">{{c.pname}}: {{c.name}}</option>{% endfor %}</select></label>
+    <label>Label<input name="label" placeholder="Wedding season"></label>
+    <label>From<input type="date" name="start" required></label>
+    <label>To (inclusive)<input type="date" name="end" required></label>
+    <label>Rate (₹)<input type="number" name="price" min="1" required></label>
+    <button class="btn sm">Add rate</button>
+  </form>
+  <table class="t" style="margin-top:12px">
+    <tr><th>Category</th><th>Label</th><th>From</th><th>To</th><th>Rate</th><th>Approval</th><th></th></tr>
+    {% for x in rules %}
+    <tr><td>{{x.cat}}</td><td>{{x.label}}</td><td>{{x.start_date|dmy}}</td><td>{{x.end_date|dmy}}</td><td>{{x.price_paise|inr}}</td><td>{{'Approved' if x.approved else 'Pending'}}</td><td><form method="post" action="{{url_for('admin.pricing_delete',xid=x.id)}}" data-confirm="Delete this rate?"><input type="hidden" name="csrf_token" value="{{csrf_token()}}"><button class="btn sm plain">Delete</button></form></td></tr>
+    {% else %}
+    <tr><td colspan="7" class="muted">No seasonal rates.</td></tr>
+    {% endfor %}
+  </table>
+</section>
+{% endblock %}

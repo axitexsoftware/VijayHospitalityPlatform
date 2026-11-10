@@ -1,6 +1,12 @@
 (function(){
 var t=document.querySelector('.mt'),n=document.getElementById('nav');
-if(t&&n)t.addEventListener('click',function(){var o=n.classList.toggle('open');t.setAttribute('aria-expanded',o)});
+if(t&&n){
+ function setMenu(open){n.classList.toggle('open',open);t.setAttribute('aria-expanded',String(open));t.setAttribute('aria-label',open?'Close navigation':'Open navigation')}
+ t.addEventListener('click',function(){setMenu(!n.classList.contains('open'))});
+ n.querySelectorAll('a').forEach(function(link){link.addEventListener('click',function(){setMenu(false)})});
+ document.addEventListener('keydown',function(e){if(e.key==='Escape'&&n.classList.contains('open')){setMenu(false);t.focus()}});
+ document.addEventListener('click',function(e){if(n.classList.contains('open')&&!n.contains(e.target)&&!t.contains(e.target))setMenu(false)});
+}
 document.querySelectorAll('[data-confirm]').forEach(function(el){el.addEventListener('click',function(e){if(!confirm(el.getAttribute('data-confirm')))e.preventDefault()})});
 document.querySelectorAll('form[data-confirm]').forEach(function(f){f.addEventListener('submit',function(e){if(!confirm(f.getAttribute('data-confirm')))e.preventDefault()})});
 document.querySelectorAll('input[data-after]').forEach(function(co){var ci=document.getElementById(co.getAttribute('data-after'));if(!ci)return;

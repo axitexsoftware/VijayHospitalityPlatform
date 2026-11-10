@@ -63,7 +63,7 @@ def require(perm=None):
 def add_headers(r):
     r.headers.setdefault('X-Content-Type-Options','nosniff');r.headers.setdefault('X-Frame-Options','DENY');r.headers.setdefault('Referrer-Policy','strict-origin-when-cross-origin')
     r.headers.setdefault('Permissions-Policy','geolocation=(),camera=(),microphone=()')
-    r.headers.setdefault('Content-Security-Policy',"default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' https://checkout.razorpay.com; frame-src https://api.razorpay.com; connect-src 'self' https://lumberjack.razorpay.com; form-action 'self'; base-uri 'self'")
+    r.headers.setdefault('Content-Security-Policy',"default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' https://checkout.razorpay.com; frame-src https://api.razorpay.com; connect-src 'self' https://lumberjack.razorpay.com; form-action 'self'; base-uri 'self'")
     if current_app.config['ENV']=='production':r.headers.setdefault('Strict-Transport-Security','max-age=31536000')
     if request.path.startswith(('/admin','/api')):r.headers['Cache-Control']='no-store'
     return r

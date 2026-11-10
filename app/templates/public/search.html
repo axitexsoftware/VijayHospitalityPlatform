@@ -1,7 +1,155 @@
-{% extends 'public/base.html' %}{% import 'public/_m.html' as m %}{% import 'public/_search.html' as s %}
-{% block title %}Check Room Availability | Vijay Hospitality, Manpur Gaya{% endblock %}{% block desc %}Search real-time availability of AC and Non-AC hotel rooms in Manpur, Gaya for your dates.{% endblock %}{% block robots %}<meta name="robots" content="noindex,follow">{% endblock %}
-{% block content %}<section class="sec"><div class="wrap"><div class="sec-h"><h1>Check availability</h1></div>{{ s.bar(f,cats,today) }}{% for k,v in err.items() %}<p class="fe">{{v}}</p>{% endfor %}
-{% if res is not none %}<h2 style="margin-top:28px">{{ res|length }} room{{ '' if res|length==1 else 's' }} available</h2>
-{% for r in res %}<article class="rc">{% if r.images %}<img src="{{ url_for('static',filename=r.images[0].path) }}" alt="{{r.images[0].alt or r.cat_name}}" loading="lazy" width="800" height="600">{% elif r.cat_images %}<img src="{{url_for('static',filename=r.cat_images[0].path.replace('.jpg','-480.jpg'))}}" alt="{{r.cat_images[0].caption or r.cat_name}}" loading="lazy" width="480" height="360">{% else %}{{ m.room_img(r,r.cat_name+' room '+r.number) }}{% endif %}<div class="in"><span class="pill">{{r.pname}}</span><h3>{{r.cat_name}} · Room {{r.number}}</h3><p class="muted">{{r.amenities|join(', ') if r.amenities else (r.description or r.cat_desc or '')}}</p></div>
-<div class="side"><div class="price">{{ r.quote.avg|inr }} <small>/ night</small></div><p class="muted">{{r.quote.nights}} night{{ '' if r.quote.nights==1 else 's' }}: {{ r.quote.room_total|inr }}{% if r.quote.tax %} + tax {{ r.quote.tax|inr }}{% endif %}<br><strong>Total {{ r.quote.total|inr }}</strong></p><a class="btn" href="/book?room_id={{r.id}}&ci={{f.ci}}&co={{f.co}}&adults={{f.adults or 1}}&children={{f.children or 0}}">Select</a></div></article>
-{% else %}<div class="card"><div class="in"><h3>No rooms available for those dates</h3><p>Try different dates or another room type, or ask our receptionist in the chat.</p></div></div>{% endfor %}{% endif %}</div></section>{% endblock %}
+{% extends 'public/base.html' %}
+{% import 'public/_m.html' as m %}
+{% import 'public/_search.html' as s %}
+{% block title %}Search Rooms and Rates | Vijay Utsav Hall, Manpur Gaya{% endblock %}
+{% block desc %}Check current room availability, configured rates, amenities and stay totals at Vijay Utsav and Vijay Garden, Manpur, Gaya.{% endblock %}
+{% block robots %}<meta name="robots" content="noindex,follow">{% endblock %}
+{% block content %}
+<section class="sec reservation-search">
+  <div class="wrap">
+    {% if res is none or not f.ci or not f.co or err %}
+      <div class="search-property-header" role="group" aria-label="Property contact details">
+        <div class="search-property-contact">
+          {% for property in search_properties %}
+          <div>
+            <strong>{{property.name}}</strong>
+            <span>{{property.address or 'Manpur, Gaya, Bihar'}}</span>
+            {% if property.phone %}<a href="tel:{{property.phone}}">{{property.phone}}</a>{% endif %}
+            {% if property.email %}<a href="mailto:{{property.email}}">{{property.email}}</a>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+
+    <header class="reservation-heading">
+      <div><span class="eyebrow">Find your stay</span><h1>Rooms and rates</h1><p>Search your dates or contact our property team for room information.</p></div>
+    </header>
+    </div>
+    {% endif %}
+    {% if inventory_pending %}
+    <aside class="availability-guidance" role="status">Room availability and tariff details are currently being updated. Please contact our property team for the latest information and reservations.</aside>
+    {% endif %}
+
+    {% if res is not none and f.ci and f.co and not err %}
+    <section class="booking-brief" aria-label="Your search summary">
+      <div class="booking-brief-item"><span>Check-in</span><strong>{{f.ci|dmy}}</strong></div>
+      <div class="booking-brief-divider" aria-hidden="true">→</div>
+      <div class="booking-brief-item"><span>Check-out</span><strong>{{f.co|dmy}}</strong></div>
+      <div class="booking-brief-item"><span>Length of stay</span><strong>{{nights}} night{{'' if nights==1 else 's'}}</strong></div>
+      <div class="booking-brief-item"><span>Rooms and guests</span><strong>{{f.rooms or 1}} room{{'' if (f.rooms or '1')=='1' else 's'}} · {{f.rooms or 1}} requested · {{f.adults or 1}} adult{{'' if (f.adults or '1')=='1' else 's'}}{% if f.children|int %}, {{f.children}} child{{'' if f.children|int==1 else 'ren'}}{% endif %}</strong>{% if f.cat %}{% for category in cats %}{% if category.id|string==f.cat|string %}<small>Room type: {{category.pname}} · {{category.name}}</small>{% endif %}{% endfor %}{% endif %}{% if f.budget %}<small>Budget: ₹{{f.budget}} per night</small>{% endif %}</div>
+      <details class="search-edit-panel" id="edit-search">
+        <summary>Edit search</summary>
+        {{s.bar(f,cats,today)}}
+      </details>
+    </section>
+    {% endif %}
+
+    {% if res is none or err %}
+    <details class="search-edit-panel" id="edit-search" open>
+      <summary>{% if res is not none and not err %}Edit search{% else %}Enter your stay details{% endif %}</summary>
+      {{s.bar(f,cats,today)}}
+    </details>
+    {% endif %}
+    {% for k,v in err.items() %}<p class="fe search-error" role="alert">{{v}}</p>{% endfor %}
+
+    {% if res is not none or inventory_pending %}
+    <section class="search-results" id="search-results" aria-labelledby="search-results-title">
+      <header class="search-results-heading{% if res %} sr{% endif %}">
+        <div><span class="eyebrow">{% if inventory_pending %}Availability by enquiry{% else %}{{res|length}} available room{{'' if res|length==1 else 's'}}{% endif %}</span><h2 id="search-results-title">{% if inventory_pending %}Room options{% else %}Select a room and rate{% endif %}</h2>{% if not inventory_pending %}<p>{{category_count}} room categor{{'y' if category_count==1 else 'ies'}} match your search</p>{% endif %}</div>
+        {% if inventory_pending %}<div class="pending-rate-tools"><span aria-label="Currency: Indian rupees">₹ INR</span></div>{% elif tax_configured and not res %}<label class="tax-toggle"><input type="checkbox" id="show-taxes" checked> <span>Show taxes and fees</span></label>{% elif not tax_configured and not res %}<span class="tax-pending-badge" role="status">Tax pending Admin confirmation</span>{% endif %}
+      </header>
+
+      {% if res and not tax_configured %}<p class="availability-guidance tax-pending-notice" role="status">Room rates below are subtotals only. Management must confirm the tax treatment before online bookings can be accepted.</p>{% endif %}
+
+      {% if not inventory_pending and (f.rooms|int or 1)>1 %}
+      <p class="availability-guidance">{% if res|length >= (f.rooms|int) %}{{res|length}} individual rooms match the request. Each reservation is confirmed separately; each selection below books one room.{% elif res %}Only {{res|length}} room{{'' if res|length==1 else 's'}} match this search, fewer than the {{f.rooms}} requested. Ask the property about group availability.{% else %}No rooms match the requested quantity and dates.{% endif %}</p>
+      {% endif %}
+
+      {% if res %}
+      <div class="search-result-controls" aria-label="Filter and sort available rooms">
+        <label>Room type<select id="filter-room-type"><option value="all">All room types</option><option value="ac">AC</option><option value="nonac">Non-AC</option></select></label>
+        <label>Room facilities<select id="filter-facility"><option value="all">All facilities</option>{% for amenity in available_amenities %}<option value="{{amenity|lower}}">{{amenity}}</option>{% endfor %}</select></label>
+        <label>Sort by<select id="sort-rooms"><option value="recommended">Recommended</option><option value="price-low">Lowest price</option><option value="price-high">Highest price</option><option value="category">Room category</option></select></label>
+        <button class="clear-search-filters" type="button" data-clear-filters>Clear filters</button>
+        {% if tax_configured %}<label class="tax-toggle"><input type="checkbox" id="show-taxes" checked> <span>Show taxes and fees</span></label>{% else %}<span class="tax-pending-badge" role="status">Tax pending Admin confirmation</span>{% endif %}
+        <span class="filter-result-count" data-filter-count aria-live="polite">{{res|length}} rooms</span>
+      </div>
+      <p class="filter-empty-state" data-filter-empty hidden>No rooms match these filters. Change a filter or clear filters to see all available rooms.</p>
+      {% endif %}
+
+      <div class="hotel-room-list" data-room-list>
+        {% if inventory_pending %}
+        <article class="hotel-room-card pending-room-card">
+          <div class="room-card-photo pending-room-photo" aria-label="Room photograph pending management approval">
+            <div class="room-photo-placeholder"><span>Room photograph</span><small>Pending management approval</small></div>
+          </div>
+          <div class="room-card-information">
+            <span class="room-type-badge">Room information</span>
+            <h3>Room options</h3>
+          </div>
+          <div class="room-card-rate pending-room-rate">
+            <div class="room-rate-summary"><span class="rate-label">Rates from</span><strong class="room-average-price">On request <small>/ night</small></strong></div>
+            <a class="btn rate-book-button" href="/contact?kind=room#enquiry">Ask about a room</a>
+          </div>
+        </article>
+        {% else %}
+        {% for r in res %}
+        {% set gallery = r.images if r.images else r.cat_images %}
+        {% set room_description = r.description or r.cat_desc %}
+        <article class="hotel-room-card" data-room-card data-ac="{{'ac' if r.ac else 'nonac'}}" data-price="{{r.quote.avg}}" data-category="{{r.cat_name|lower}}" data-amenities="{{r.amenities|join('|')|lower}}">
+          <div class="room-card-photo" data-room-gallery>
+            {% if gallery %}
+              {% set first_image = gallery[0] %}
+              {% set first_path = first_image.path if r.images else first_image.path.replace('.jpg','-480.jpg') %}
+              <img data-room-photo src="{{url_for('static',filename=first_path)}}" alt="{{first_image.alt if r.images and first_image.alt else (first_image.caption if not r.images else r.cat_name)}}" loading="lazy" width="800" height="600">
+              <div class="room-gallery-sources" hidden>{% for image in gallery %}{% set image_path = image.path if r.images else image.path.replace('.jpg','-480.jpg') %}<span data-gallery-image data-src="{{url_for('static',filename=image_path)}}" data-alt="{{image.alt if r.images and image.alt else (image.caption if not r.images else r.cat_name ~ ' room')}}"></span>{% endfor %}</div>
+            {% else %}
+              <div class="room-photo-placeholder"><span>Room photograph</span><small>Pending management approval</small></div>
+            {% endif %}
+            {% if gallery|length>1 %}<div class="room-gallery-controls"><button type="button" data-gallery-prev aria-label="Previous room photo">‹</button><span><b data-gallery-index>1</b> / {{gallery|length}}</span><button type="button" data-gallery-next aria-label="Next room photo">›</button></div>{% elif gallery %}<span class="room-photo-count">1 photo</span>{% endif %}
+          </div>
+
+          <div class="room-card-information">
+            <div class="room-card-kicker"><span class="pill">{{r.pname}}</span><span class="room-type-badge">{{'Air conditioned' if r.ac else 'Non-AC room'}}</span>{% if r.description and r.description.startswith('TEST DATA ONLY') %}<span class="demo-data-badge">Demo data</span>{% endif %}</div>
+            <h3>{{r.cat_name}} · Room {{r.number}}</h3>
+            <p class="result-address">{{r.paddress}}</p>
+            <p class="room-card-description">{{room_description or 'Room features and amenities are listed as provided by the property.'}}</p>
+            <ul class="room-result-facts"><li>Up to {{r.max_adults}} adult{{'' if r.max_adults==1 else 's'}}</li><li>Up to {{r.max_children}} child{{'' if r.max_children==1 else 'ren'}}</li><li>Maximum {{r.max_occupancy}} guests total</li><li>{{r.available_count}} available in this category</li>{% if r.floor %}<li>Floor {{r.floor}}</li>{% endif %}</ul>
+            {% if r.amenities %}<ul class="room-amenity-list" aria-label="Room facilities">{% for amenity in r.amenities %}<li>{{amenity}}</li>{% endfor %}</ul>{% else %}<p class="room-no-amenities">Room facilities not listed.</p>{% endif %}
+            <details class="room-detail-disclosure"><summary>View details</summary><div class="room-detail-content"><h4>{{r.cat_name}} · Room {{r.number}}</h4><p>{{room_description or 'No further room description has been provided.'}}</p>{% if r.cat_desc and r.cat_desc!=room_description %}<p>{{r.cat_desc}}</p>{% endif %}{% if r.floor %}<p><strong>Floor:</strong> {{r.floor}}</p>{% endif %}<p><strong>Maximum occupancy:</strong> {{r.max_adults}} adults, {{r.max_children}} children</p>{% if r.amenities %}<h5>Room facilities</h5><ul>{% for amenity in r.amenities %}<li>{{amenity}}</li>{% endfor %}</ul>{% endif %}{% if gallery|length>1 %}<div class="room-detail-gallery">{% for image in gallery %}{% set image_path = image.path if r.images else image.path.replace('.jpg','-480.jpg') %}<img src="{{url_for('static',filename=image_path)}}" alt="{{image.alt if r.images and image.alt else (image.caption if not r.images else r.cat_name ~ ' room')}}" loading="lazy" width="480" height="360" data-fallback="{{url_for('static',filename='img/room-b-480.avif')}}">{% endfor %}</div>{% endif %}<p class="room-policy-note">Cancellation terms follow the configured policy: free cancellation up to {{policy_hours}} hours before check-in; later cancellations refund {{late_refund_percent}}% of the amount paid. Check-in/check-out times and any additional property rules should be confirmed with the property.</p><a href="/rooms/{{r.id}}">Open full room page</a></div></details>
+          </div>
+
+          <div class="room-card-rate">
+            <div class="room-rate-summary"><span class="rate-label">Rates from</span><strong class="room-average-price">{{r.quote.avg|inr}} <small>/ night</small></strong><span class="room-stay-price">{{nights}} night{{'' if nights==1 else 's'}} · Room {{r.quote.room_total|inr}}</span><span class="room-tax-price" {% if r.quote.tax_configured %}data-tax-line{% endif %}>{% if r.quote.tax_configured %}{% if r.quote.tax %}Taxes and fees {{r.quote.tax|inr}}{% else %}No additional tax calculated{% endif %}{% else %}Tax pending management confirmation{% endif %}</span><strong class="room-grand-total" data-total-with-tax>{{r.quote.total|inr}}</strong><strong class="room-grand-total" data-total-without-tax hidden>{{r.quote.room_total|inr}}</strong><small data-total-label>{% if r.quote.tax_configured %}Total including applicable taxes{% else %}Room subtotal · tax pending confirmation{% endif %}</small><span class="room-unit-note">Price for 1 room · {{nights}} night{{'' if nights==1 else 's'}}</span></div>
+            <details class="room-rate-disclosure"><summary class="btn">View Rates</summary><div class="room-rate-panel"><div class="current-rate-plan"><div><span class="eyebrow">Available rate</span><h4>Current room rate</h4><p>Calculated from this category’s approved nightly prices.</p></div><span class="rate-plan-price">{{r.quote.avg|inr}}<small> average / night</small></span></div><dl class="rate-total-breakdown"><div><dt>Room charges · {{nights}} night{{'' if nights==1 else 's'}}</dt><dd>{{r.quote.room_total|inr}}</dd></div>{% if r.quote.tax_configured %}<div data-tax-line><dt>Taxes and fees</dt><dd>{{r.quote.tax|inr}}</dd></div>{% else %}<div class="tax-pending-row"><dt>Taxes and fees</dt><dd>Pending confirmation</dd></div>{% endif %}<div class="rate-total"><dt data-rate-total-label>{% if r.quote.tax_configured %}Total including applicable taxes{% else %}Room subtotal · tax pending confirmation{% endif %}</dt><dd data-total-with-tax>{{r.quote.total|inr}}</dd><dd data-total-without-tax hidden>{{r.quote.room_total|inr}}</dd></div></dl><details class="nightly-rates"><summary>Nightly rate breakdown</summary><dl>{% for nightly in r.nightly_rates %}<div><dt>{{nightly.date|dmy}}</dt><dd>{{nightly.amount|inr}}</dd></div>{% endfor %}</dl></details><p class="rate-policy-note">Cancellation follows the configured property policy. Confirm applicable guest and property arrangements before travel.</p>{% if r.quote.tax_configured and (f.rooms|int or 1)==1 %}<a class="btn rate-book-button" href="/book?room_id={{r.id}}&ci={{f.ci}}&co={{f.co}}&adults={{f.adults or 1}}&children={{f.children or 0}}">Book this room · <span data-book-price-with-tax>{{r.quote.total|inr}}</span><span data-book-price-without-tax hidden>{{r.quote.room_total|inr}}</span></a>{% elif r.quote.tax_configured %}<a class="btn ghost rate-book-button" href="/contact?kind=room#enquiry">Enquire about {{f.rooms}} rooms</a>{% else %}<a class="btn ghost rate-book-button" href="/contact?kind=room#enquiry">Enquire to confirm final price</a>{% endif %}</div></details>
+          </div>
+        </article>
+        {% else %}
+        <div class="empty-state search-empty-state">
+          <span class="eyebrow">Availability by enquiry</span>
+          {% if not inventory_publication.rates_confirmed or not inventory_publication.occupancy_confirmed or not inventory_publication.rooms_confirmed %}
+          <h2>Room details are pending confirmation</h2>
+          <p>Room rates and occupancy details are subject to management confirmation. Online search cannot confirm a stay until both are approved. Contact the property team about your dates and requirements.</p>
+          {% elif inventory_count==0 and active_room_count %}
+          <h2>Room rates are not published yet</h2>
+          <p>{{active_room_count}} active room listing{{'' if active_room_count==1 else 's'}} are configured, but current rates have not been published. Online search cannot confirm a bookable stay until rates are set. Ask the property team about your dates, room type, occupancy and current tariff.</p>
+          {% if room_previews %}<div class="enquiry-room-options">{% for option in room_previews %}<article class="enquiry-room-option"><div class="room-photo-placeholder"><span>Room photograph</span><small>Pending management approval</small></div><div><span>{{option.pname}}</span><h3>{{option.name}}</h3><small>Rates on request · availability subject to confirmation</small></div><a class="btn ghost" href="/contact?kind=room#enquiry">Ask about this option</a></article>{% endfor %}</div>{% endif %}
+          {% elif inventory_count==0 %}
+          <h2>Room options require a quick enquiry</h2>
+          <p>No rooms are currently published for online search on those dates. The property team can confirm current room options, inventory and rates for your stay.</p>
+          {% if room_previews %}<div class="enquiry-room-options">{% for option in room_previews %}<article class="enquiry-room-option"><div class="room-photo-placeholder"><span>Room details</span><small>Subject to confirmation</small></div><div><span>{{option.pname}}</span><h3>{{option.name}}</h3><small>Rates, photos and occupancy details on request</small></div><a class="btn ghost" href="/contact?kind=room#enquiry">Ask about this option</a></article>{% endfor %}</div>{% endif %}
+          {% else %}
+          <h2>No rooms available for those dates</h2>
+          <p>Try different dates, adjust your guest count or ask the property team for help.</p>
+          {% endif %}
+          <div class="acts"><a class="btn" href="/contact?kind=room#enquiry">Ask about a room</a><a class="btn ghost" href="#room-search">Edit search</a></div>
+        </div>
+        {% endfor %}
+        {% endif %}
+      </div>
+      {% if res %}<p class="group-booking-note">Each room selection creates a separate reservation. For multiple rooms, please confirm each room individually or contact the property for assistance.</p>{% endif %}
+    </section>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}<script src="{{url_for('static',filename='js/search.js')}}" defer></script>{% endblock %}

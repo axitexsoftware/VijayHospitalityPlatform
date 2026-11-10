@@ -1,0 +1,60 @@
+{% extends 'admin/base.html' %}
+{% block title %}Review inventory setup{% endblock %}
+{% block content %}
+<header class="dashboard-heading">
+  <div><p class="dashboard-eyebrow">FINAL REVIEW</p><h1>Review inventory changes</h1><p>Nothing has been written to the database yet.</p></div>
+  <a class="btn sm plain" href="{{url_for('admin.inventory_setup')}}">Cancel review</a>
+</header>
+
+<section class="card inventory-safety-note">
+  <strong>Rooms omitted from this proposal will remain unchanged.</strong>
+  <span>Room-specific price overrides are preserved. Listed inactive rooms will be activated; new room numbers will be created.</span>
+</section>
+
+<section class="card inventory-review-tax">
+  <span class="eyebrow">Tax status</span>
+  {% if proposal.tax_confirmed %}<h2>CONFIRMED · {{proposal.tax_percent}}%</h2><p>The approved tax percentage will be used in future quotes and bookings.</p>{% else %}<h2>PENDING</h2><p>{% if proposal.tax_percent %}{{proposal.tax_percent}}% is saved as unconfirmed.{% else %}No tax percentage is provided.{% endif %} Online booking will remain disabled until management confirms a percentage, including an explicit 0% if applicable.</p>{% endif %}
+</section>
+<section class="card inventory-review-tax">
+  <span class="eyebrow">Room publication status</span>
+  <h2>Details {{'CONFIRMED' if proposal.details_confirmed else 'PENDING'}} · Rooms {{'CONFIRMED' if proposal.rooms_confirmed else 'PENDING'}} · Rates {{'CONFIRMED' if proposal.rates_confirmed else 'PENDING'}} · Occupancy {{'CONFIRMED' if proposal.occupancy_confirmed else 'PENDING'}} · Photos {{'CONFIRMED' if proposal.photos_confirmed else 'PENDING'}}</h2>
+  <p>Unconfirmed room numbers, rates, occupancy details and room photos remain hidden from guests. Online search requires room inventory, rates and occupancy to be confirmed.</p>
+</section>
+
+{% for category in proposal.categories %}
+<section class="card inventory-review-category">
+  <header><span class="eyebrow">{{category.property}}</span><h2>{{category.category}} · {{'AC' if category.ac else 'Non-AC'}}</h2></header>
+  <dl class="inventory-review-facts">
+    <div><dt>Base rate / night</dt><dd>{{category.rate_paise|inr if category.rate_paise is not none else 'Pending'}}</dd></div>
+    <div><dt>Maximum adults</dt><dd>{{category.max_adults if category.max_adults is not none else 'Pending'}}</dd></div>
+    <div><dt>Maximum children</dt><dd>{{category.max_children if category.max_children is not none else 'Pending'}}</dd></div>
+    <div><dt>Maximum total occupancy</dt><dd>{{category.max_occupancy if category.max_occupancy is not none else 'Pending'}}</dd></div>
+  </dl>
+  <table class="t"><thead><tr><th>Room</th><th>Action</th><th>Rate source</th></tr></thead><tbody>
+    {% for room in category.rooms %}<tr><td>{{room.number}}</td><td>{% if room.existing_id %}{{'Activate existing room' if room.was_inactive else 'Keep existing room'}}{% else %}Create room{% endif %}</td><td>{{'Preserve individual override' if room.has_price_override else 'Use category rate'}}</td></tr>{% endfor %}
+  </tbody></table>
+</section>
+{% endfor %}
+
+<form class="inventory-review-actions" method="post" action="{{url_for('admin.inventory_setup_apply')}}">
+  <input type="hidden" name="csrf_token" value="{{csrf_token()}}">
+  <input type="hidden" name="review_token" value="{{token}}">
+  {% for category in proposal.categories %}
+    <input type="hidden" name="category_id" value="{{category.category_id}}">
+    {% if category.rate_paise is not none %}<input type="hidden" name="rate_{{category.category_id}}" value="{{'%.2f'|format(category.rate_paise/100)}}">{% endif %}
+    {% if category.max_adults is not none %}<input type="hidden" name="max_adults_{{category.category_id}}" value="{{category.max_adults}}">{% endif %}
+    {% if category.max_children is not none %}<input type="hidden" name="max_children_{{category.category_id}}" value="{{category.max_children}}">{% endif %}
+    {% if category.max_occupancy is not none %}<input type="hidden" name="max_occupancy_{{category.category_id}}" value="{{category.max_occupancy}}">{% endif %}
+    {% for room in category.rooms %}<input type="hidden" name="rooms_{{category.category_id}}" value="{{room.number}}">{% endfor %}
+  {% endfor %}
+  <input type="hidden" name="tax_percent" value="{{proposal.tax_percent}}">
+  {% if proposal.details_confirmed %}<input type="hidden" name="confirm_details" value="1">{% endif %}
+  {% if proposal.tax_confirmed %}<input type="hidden" name="confirm_tax" value="1">{% endif %}
+  {% if proposal.rates_confirmed %}<input type="hidden" name="confirm_rates" value="1">{% endif %}
+  {% if proposal.occupancy_confirmed %}<input type="hidden" name="confirm_occupancy" value="1">{% endif %}
+  {% if proposal.rooms_confirmed %}<input type="hidden" name="confirm_rooms" value="1">{% endif %}
+  {% if proposal.photos_confirmed %}<input type="hidden" name="confirm_room_photos" value="1">{% endif %}
+  <button class="btn plain" type="submit" name="action" value="edit">Edit entries</button>
+  <button class="btn" type="submit" name="action" value="apply">Apply reviewed changes</button>
+</form>
+{% endblock %}
