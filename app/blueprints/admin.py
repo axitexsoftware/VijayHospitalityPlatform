@@ -1,4 +1,4 @@
-import os,secrets,io,datetime as dtm,json,hashlib,hmac
+import os,secrets,io,datetime as dtm,json,hashlib,hmac,sqlite3
 from decimal import Decimal,InvalidOperation
 from flask import Blueprint,render_template,request,redirect,url_for,flash,session,abort,Response,current_app,g
 from PIL import Image
@@ -6,6 +6,7 @@ from ..db import get_db,tx,setting,set_setting
 from ..security import require,login,rate_limit,hash_password,password_problem
 from ..util import today,now_s,d
 from ..services import booking as B,payments as P,notify,reports as R,dynamic_pricing as DP,media as M
+from .. import configuration as HC
 bp=Blueprint('admin',__name__)
 def back(default='admin.dashboard',**k):return redirect(request.referrer or url_for(default,**k))
 def guard(fn,*a,ok=None,**k):
@@ -764,6 +765,184 @@ def expense_delete(eid):
         db.execute('DELETE FROM expense_entries WHERE id=?',(eid,));B.audit(db,g.user,'expense_deleted','expense',eid,f'{row["kind"]}: {row["category"]}, {row["amount_paise"]} paise');flash('Financial entry removed.','ok')
     return back('admin.reports')
 # ---- users, settings, audit, conversations
+@bp.get('/configuration')
+@require('settings')
+def configuration_page():
+    db=get_db();config=HC.load(db,current_app.config);inventory=B.inventory_configuration(db)
+    _,tax_confirmed=B.tax_configuration(db)
+    row=db.execute('SELECT setup_complete FROM hotel_configuration WHERE id=1').fetchone()
+    checks=[
+        ('Hotel identity and brand',bool(config['brand']['name']),url_for('admin.configuration_onboarding')),
+        ('Property details',db.execute('SELECT COUNT(*) FROM properties WHERE active=1').fetchone()[0]>0,url_for('admin.settings')),
+        ('Room categories and inventory',db.execute('SELECT COUNT(*) FROM rooms WHERE status=\'active\'').fetchone()[0]>0,url_for('admin.rooms')),
+        ('Rates approved',inventory['rates_confirmed'],url_for('admin.categories')),
+        ('Tax confirmed',tax_confirmed,url_for('admin.categories')),
+        ('Payment gateway',P.configured(),url_for('admin.settings')),
+        ('AI receptionist',bool(current_app.config['LLM_API_KEY']),url_for('admin.settings')),
+    ]
+    return render_template('admin/configuration.html',config=config,config_json=json.dumps(config,ensure_ascii=False,indent=2),
+        catalog=HC.export_payload(db),checks=checks,setup_complete=bool(row and row['setup_complete']))
+
+@bp.post('/configuration/save')
+@require('settings')
+def configuration_save():
+    try:
+        config=HC.validate(request.form.get('configuration',''))
+        with tx(get_db()):
+            HC.save(get_db(),config,g.user['id'])
+            B.audit(get_db(),g.user,'configuration_saved','configuration',1,'Admin configuration editor')
+        flash('Configuration saved. Existing reservations and payment records were not modified.','ok')
+    except HC.ConfigurationError as exc:
+        flash(str(exc),'error')
+    return redirect(url_for('admin.configuration_page'))
+
+@bp.get('/configuration/export')
+@require('settings')
+def configuration_export():
+    payload=HC.export_payload(get_db());payload['configuration']=HC.load(get_db(),current_app.config)
+    return Response(json.dumps(payload,ensure_ascii=False,indent=2),mimetype='application/json',
+        headers={'Content-Disposition':'attachment; filename=hotel-configuration.json','Cache-Control':'no-store'})
+
+def _catalog_matches(db,properties,categories,rooms):
+    current=HC.export_payload(db)
+    for key,imported in (('properties',properties),('room_categories',categories),('rooms',rooms)):
+        if json.dumps(current[key],sort_keys=True)!=json.dumps(imported,sort_keys=True):
+            return False
+    return True
+
+def _import_catalog(db,properties,categories,rooms):
+    property_ids={}
+    for prop in properties:
+        cur=db.execute('''INSERT INTO properties(slug,name,kind,address,phone,email,whatsapp,map_url,description,active)
+            VALUES(?,?,?,?,?,?,?,?,?,?)''',(prop['slug'],prop['name'],prop['kind'],prop['address'],prop['phone'],
+            prop['email'],prop['whatsapp'],prop['map_url'],prop['description'],prop['active']))
+        property_ids[prop['slug']]=cur.lastrowid
+    category_ids={}
+    for cat in categories:
+        if cat['property_slug'] not in property_ids:raise HC.ConfigurationError('Every room category must refer to a property in the same export.')
+        int_fields=('base_price_paise','max_adults','max_children')
+        for field in int_fields:
+            if not isinstance(cat[field],int) or cat[field]<0:raise HC.ConfigurationError(f'room_categories.{field} must be a non-negative integer.')
+        if cat['max_adults']<1:raise HC.ConfigurationError('A room category must allow at least one adult.')
+        for field in ('nightly_rate_paise','max_adults_approved','max_children_approved','max_occupancy'):
+            value=cat[field]
+            if value is not None and (not isinstance(value,int) or value<0):raise HC.ConfigurationError(f'room_categories.{field} must be a non-negative integer or null.')
+        tax=cat['tax_percent']
+        if tax is not None and (not isinstance(tax,(int,float)) or not 0<=tax<=100):raise HC.ConfigurationError('A room category tax percentage must be from 0 to 100.')
+        cur=db.execute('''INSERT INTO room_categories(property_id,name,room_type,ac,description,base_price_paise,max_adults,max_children,
+            nightly_rate_paise,max_adults_approved,max_children_approved,max_occupancy,currency,tax_percent)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',(property_ids[cat['property_slug']],cat['name'],cat['room_type'],
+            int(bool(cat['ac'])),cat['description'],cat['base_price_paise'],cat['max_adults'],cat['max_children'],
+            cat['nightly_rate_paise'],cat['max_adults_approved'],cat['max_children_approved'],cat['max_occupancy'],
+            cat['currency'],tax))
+        category_ids[(cat['property_slug'],cat['name'])]=cur.lastrowid
+    for room in rooms:
+        category_id=category_ids.get((room['property_slug'],room['category_name']))
+        property_id=property_ids.get(room['property_slug'])
+        if not category_id or not property_id:raise HC.ConfigurationError('Every room must refer to a category and property in the same export.')
+        price=room['price_override_paise']
+        if price is not None and (not isinstance(price,int) or price<=0):raise HC.ConfigurationError('Room price overrides must be positive integer paise or null.')
+        db.execute('''INSERT INTO rooms(property_id,category_id,number,floor,price_override_paise,description,status)
+            VALUES(?,?,?,?,?,?,?)''',(property_id,category_id,room['number'],room['floor'],price,room['description'],room['status']))
+
+@bp.post('/configuration/import')
+@require('settings')
+def configuration_import():
+    upload=request.files.get('config_file')
+    if not upload:
+        flash('Choose a configuration JSON file to import.','error')
+        return redirect(url_for('admin.configuration_page'))
+    try:
+        raw=upload.read(HC.MAX_CONFIG_BYTES+1).decode('utf-8')
+        config,properties,categories,rooms=HC.import_payload(raw)
+        db=get_db()
+        has_history=db.execute('SELECT EXISTS(SELECT 1 FROM reservations UNION ALL SELECT 1 FROM payments UNION ALL SELECT 1 FROM transactions)').fetchone()[0]
+        has_catalog=db.execute('SELECT EXISTS(SELECT 1 FROM properties UNION ALL SELECT 1 FROM room_categories UNION ALL SELECT 1 FROM rooms)').fetchone()[0]
+        catalog_matches=_catalog_matches(db,properties,categories,rooms)
+        if not catalog_matches and (has_history or has_catalog):
+            raise HC.ConfigurationError('This import contains different property or inventory data. Import that data only into an empty installation; use the existing property, room and rate screens to avoid changing historical records.')
+        with tx(db):
+            if not catalog_matches:_import_catalog(db,properties,categories,rooms)
+            HC.save(db,config,g.user['id'])
+            B.audit(db,g.user,'configuration_imported','configuration',1,
+                f'{len(properties)} properties, {len(categories)} categories, {len(rooms)} rooms')
+        flash('Configuration imported and validated. Existing bookings and payment history were preserved.','ok')
+    except (UnicodeDecodeError,HC.ConfigurationError) as exc:
+        flash(str(exc) or 'Configuration file must be UTF-8 JSON.','error')
+    except (sqlite3.IntegrityError,ValueError,TypeError,KeyError):
+        current_app.logger.exception('Configuration import failed')
+        flash('Configuration was not imported. Check for duplicate property/category/room identifiers and review the file.','error')
+    return redirect(url_for('admin.configuration_page'))
+
+@bp.route('/configuration/onboarding',methods=['GET','POST'])
+@require('settings')
+def configuration_onboarding():
+    db=get_db();config=HC.load(db,current_app.config)
+    if request.method=='POST':
+        step=request.form.get('step','1')
+        if step=='complete':
+            with tx(db):
+                HC.save(db,config,g.user['id'],complete=True)
+                B.audit(db,g.user,'configuration_onboarding_completed','configuration',1,'Launch checklist reviewed')
+            flash('Hotel setup marked complete. Review the configuration checklist any time you need to make changes.','ok')
+            return redirect(url_for('admin.configuration_page'))
+        if step!='1':abort(400)
+        proposed=json.loads(json.dumps(config))
+        f=request.form
+        proposed['brand'].update({'name':f.get('name',''),'tagline':f.get('tagline',''),
+            'logo_path':f.get('logo_path',''),'favicon_path':f.get('favicon_path','')})
+        proposed['brand']['colors'].update({'primary':f.get('primary_color',''),'accent':f.get('accent_color',''),
+            'background':f.get('background_color','')})
+        proposed['brand']['fonts'].update({'heading':f.get('heading_font',''),'body':f.get('body_font','')})
+        proposed['website'].update({'site_url':f.get('site_url',''),'primary_domain':f.get('primary_domain',''),
+            'default_language':f.get('default_language','')})
+        proposed['deployment'].update({'site_url':proposed['website']['site_url'],'primary_domain':proposed['website']['primary_domain']})
+        proposed['pages']['home']['title']=proposed['brand']['name']
+        proposed['pages']['home']['eyebrow']=f.get('location_label','')
+        if config['brand']['name']!=proposed['brand']['name']:
+            if config['pages']['home']['subtitle']==HC.DEFAULT_CONFIG['pages']['home']['subtitle']:
+                proposed['pages']['home']['subtitle']=proposed['brand']['tagline'] or 'A welcoming stay, thoughtfully hosted.'
+            if config['pages']['home']['description']==HC.DEFAULT_CONFIG['pages']['home']['description']:
+                proposed['pages']['home']['description']='A welcoming destination for comfortable stays and memorable celebrations. Contact our team to discuss your plans.'
+            if config['pages']['about']['description']==HC.DEFAULT_CONFIG['pages']['about']['description']:
+                proposed['pages']['about']['description']=f"Welcome to {proposed['brand']['name']}. Contact our team to ask about stays and celebrations."
+            if config['seo']['description']==HC.DEFAULT_CONFIG['seo']['description']:
+                proposed['seo']['description']=f"Discover stays, experiences and guest services at {proposed['brand']['name']}."
+        proposed['seo']['title']=f.get('seo_title','')
+        try:
+            proposed=HC.validate(proposed)
+            with tx(db):
+                HC.save(db,proposed,g.user['id'],complete=False)
+                B.audit(db,g.user,'configuration_identity_saved','configuration',1,'Hotel identity and launch configuration')
+            flash('Hotel identity saved. Continue to the operational setup checklist.','ok')
+            return redirect(url_for('admin.configuration_onboarding',step=2))
+        except HC.ConfigurationError as exc:
+            flash(str(exc),'error')
+            config=proposed
+    step=request.args.get('step','1')
+    if step=='2':
+        inventory=B.inventory_configuration(db);_,tax_confirmed=B.tax_configuration(db)
+        checks=[
+            ('Property details',db.execute('SELECT COUNT(*) FROM properties WHERE active=1').fetchone()[0]>0,url_for('admin.settings')),
+            ('Room categories and inventory',db.execute('SELECT COUNT(*) FROM rooms WHERE status=\'active\'').fetchone()[0]>0,url_for('admin.rooms')),
+            ('Rates approved',inventory['rates_confirmed'],url_for('admin.categories')),
+            ('Tax confirmed',tax_confirmed,url_for('admin.categories')),
+            ('Contact channels',bool(db.execute('SELECT COUNT(*) FROM properties WHERE active=1 AND (phone IS NOT NULL OR email IS NOT NULL)').fetchone()[0]),url_for('admin.settings')),
+        ]
+        return render_template('admin/configuration_onboarding_operations.html',config=config,checks=checks)
+    if step=='3':
+        checks=[
+            ('Public identity and metadata',bool(config['brand']['name'] and config['seo']['title']),url_for('admin.configuration_onboarding',step=1)),
+            ('Production website URL',config['website']['site_url'].startswith('https://'),url_for('admin.configuration_onboarding',step=1)),
+            ('Payment gateway credentials',P.configured(),url_for('admin.settings')),
+            ('AI receptionist credentials',bool(current_app.config['LLM_API_KEY']),url_for('admin.settings')),
+            ('Email delivery credentials',bool(current_app.config['SMTP_HOST'] and current_app.config['SMTP_FROM']),url_for('admin.settings')),
+            ('WhatsApp credentials',bool(current_app.config['WHATSAPP_TOKEN'] and current_app.config['WHATSAPP_PHONE_ID']),url_for('admin.settings')),
+        ]
+        return render_template('admin/configuration_onboarding_review.html',config=config,checks=checks)
+    if step!='1':abort(404)
+    return render_template('admin/configuration_onboarding.html',config=config,fonts=HC.FONTS)
+
 @bp.route('/users',methods=['GET','POST'])
 @require('users')
 def users():

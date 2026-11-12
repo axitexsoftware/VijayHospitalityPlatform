@@ -39,13 +39,14 @@ bookable) → **Rooms** (add real rooms, photos, amenities) → test a booking o
 Search content is database-backed: Settings controls property/contact details; Categories and rates controls room type, category description, occupancy, rates, tax and whether the category is published; Rooms controls individual room number, floor, description, amenities, optional price, photos and 360° panorama. Save and approve/publish required category details before they appear publicly. Availability is computed from active rooms, reservations and room blocks. Admins and owners also get management links on search results when signed in. Search-page labels and layout are application UI, not editable property content.
 ## 5. Tests
 ```bash
-python -m unittest discover -s tests -t . -v      # 27 tests; results in docs/TEST-RESULTS.txt
+python -m unittest discover -s tests -t . -v      # results in docs/TEST-RESULTS.txt
 ```
 ## 6. Integrations (see docs/INTEGRATIONS.md)
 Razorpay, AI receptionist (any OpenAI-compatible API), SMTP email, WhatsApp Cloud API and SMS webhook are configured only through environment variables.
 Unconfigured channels are logged as **skipped**; nothing is ever shown as sent or paid unless the provider confirmed it.
 ## 7. Deploy and operate
 See docs/DEPLOYMENT.md (server, HTTPS, cron reminders, backups) and docs/API.md.
+Admin → **Configuration** provides the hotel identity wizard, validated JSON import/export, reusable page and notification configuration, and a launch checklist. See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for the schema, import safeguards, secret handling and current single-tenant boundary.
 
 ## What is implemented
 - Availability engine from real records; double booking is blocked by a database primary key on (room, night) plus a locked transaction; tested with 8 simultaneous requests.

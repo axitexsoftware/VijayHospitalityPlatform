@@ -1,6 +1,7 @@
 import datetime as dtm
 from flask import Blueprint,render_template,request,redirect,url_for,session,abort,flash,Response,current_app
 from ..db import get_db,setting
+from ..configuration import load as hotel_configuration
 from ..security import rate_limit,rate_ok
 from ..util import today,now_s,d
 from ..services import booking as B,payments as P,notify,dynamic_pricing as DP
@@ -53,7 +54,9 @@ def media_items(db,kind,property_id=None,category_id=None):
     if category_id is not None:sql+=' AND category_id=?';args.append(category_id)
     if kind=='room':sql+=" AND category_id IN (SELECT id FROM room_categories WHERE photos_status='approved' AND publication_status='published')"
     return [dict(r) for r in db.execute(sql+' ORDER BY sort,id',args)]
-def hotel_ld(ps):return {'@context':'https://schema.org','@graph':[{'@type':'Hotel','name':p['name'],'description':p['description'],'address':{'@type':'PostalAddress','streetAddress':p['address'],'addressLocality':'Manpur, Gaya','addressRegion':'Bihar','addressCountry':'IN'},'url':current_app.config['SITE_URL']} for p in ps]}
+def hotel_ld(ps):
+    site_url=hotel_configuration(get_db(),current_app.config)['website']['site_url']
+    return {'@context':'https://schema.org','@graph':[{'@type':'Hotel','name':p['name'],'description':p['description'],'address':{'@type':'PostalAddress','streetAddress':p['address'],'addressLocality':'Manpur, Gaya','addressRegion':'Bihar','addressCountry':'IN'},'url':site_url} for p in ps]}
 def can_view(ref):return ref in session.get('refs',[]) or session.get('manage')==ref
 @bp.get('/')
 def home():
@@ -221,9 +224,11 @@ def faq():return render_template('public/faq.html',faq=FAQ,ld={'@context':'https
 @bp.get('/privacy')
 def privacy():return render_template('public/privacy.html')
 @bp.get('/robots.txt')
-def robots():return Response(f"User-agent: *\nAllow: /\nDisallow: /admin/\nDisallow: /api/\nDisallow: /booking/\n\nSitemap: {current_app.config['SITE_URL']}/sitemap.xml\n",mimetype='text/plain')
+def robots():
+    site_url=hotel_configuration(get_db(),current_app.config)['website']['site_url']
+    return Response(f"User-agent: *\nAllow: /\nDisallow: /admin/\nDisallow: /api/\nDisallow: /booking/\n\nSitemap: {site_url}/sitemap.xml\n",mimetype='text/plain')
 @bp.get('/sitemap.xml')
 def sitemap():
-    db=get_db();u=current_app.config['SITE_URL'];paths=['/','/properties','/rooms','/events','/offers','/gallery','/facilities','/about','/contact','/faq','/privacy','/search','/booking/lookup']
+    db=get_db();u=hotel_configuration(db,current_app.config)['website']['site_url'];paths=['/','/properties','/rooms','/events','/offers','/gallery','/facilities','/about','/contact','/faq','/privacy','/search','/booking/lookup']
     if not B.inventory_publication_error(db):paths += [f'/rooms/{r[0]}' for r in db.execute(B.ROOM_SQL)]
     return Response('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'+''.join(f'<url><loc>{u}{p}</loc></url>\n' for p in paths)+'</urlset>',mimetype='application/xml')

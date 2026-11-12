@@ -1,8 +1,11 @@
 """Customer notifications. Every attempt is logged; nothing is recorded as 'sent' unless the provider accepted it."""
 import smtplib,requests
 from email.message import EmailMessage
+from email.utils import formataddr
+from string import Template
 from flask import current_app
 from ..util import now_s,d,today
+from ..configuration import load as hotel_configuration
 from . import booking as B
 def _text(res,event,db):
     fmt=lambda s:d(s).strftime('%d %b %Y');base=f"Booking {res['ref']} at {res['pname']}, Room {res['rnumber']} ({res['cat_name']}), {fmt(res['check_in'])} to {fmt(res['check_out'])}."
@@ -14,13 +17,21 @@ def _text(res,event,db):
     'checkin_reminder':f"Hello {res['cname']}, a reminder that your stay begins tomorrow. {base} Check-in is from 12:00 PM.",
     'checked_in':f"Welcome {res['cname']}! You are checked in to Room {res['rnumber']}. {base}",
     'checked_out':f"Thank you for staying with us, {res['cname']}. Your check-out for booking {res['ref']} is complete. Balance Rs {due/100:,.0f}."}
-    return m[event]
+    template=hotel_configuration(db,current_app.config)['notifications']['templates'].get(event)
+    if not template:return m[event]
+    values={'guest':res['cname'],'reference':res['ref'],'property':res['pname'],'room':res['rnumber'],
+        'category':res['cat_name'],'check_in':fmt(res['check_in']),'check_out':fmt(res['check_out']),
+        'total':f"{res['total_paise']/100:,.0f}",'paid':f"{paid/100:,.0f}",'balance':f"{due/100:,.0f}"}
+    return Template(template).safe_substitute(values)
 def _log(db,rid,ch,ev,rcpt,st,detail=''):db.execute('INSERT INTO notifications(reservation_id,channel,event,recipient,status,detail,created_at) VALUES(?,?,?,?,?,?,?)',(rid,ch,ev,rcpt,st,detail[:300],now_s()))
 def send(db,rid,event):
-    c=current_app.config;res=B.get_res(db,rid);text=_text(res,event,db)
-    if res['cemail'] and c['SMTP_HOST'] and c['SMTP_FROM']:
+    c=current_app.config;hotel=hotel_configuration(db,c);res=B.get_res(db,rid);text=_text(res,event,db)
+    sender=hotel['integrations']['email']
+    from_email=sender['from_email'] or c['SMTP_FROM']
+    from_name=sender['from_name']
+    if res['cemail'] and c['SMTP_HOST'] and from_email:
         try:
-            m=EmailMessage();m['Subject']=f"{res['pname']}: "+event.replace('_',' ').capitalize();m['From']=c['SMTP_FROM'];m['To']=res['cemail'];m.set_content(text)
+            m=EmailMessage();m['Subject']=f"{res['pname']}: "+event.replace('_',' ').capitalize();m['From']=formataddr((from_name,from_email));m['To']=res['cemail'];m.set_content(text)
             with smtplib.SMTP(c['SMTP_HOST'],c['SMTP_PORT'],timeout=15) as s:
                 s.starttls()
                 if c['SMTP_USER']:s.login(c['SMTP_USER'],c['SMTP_PASSWORD'])

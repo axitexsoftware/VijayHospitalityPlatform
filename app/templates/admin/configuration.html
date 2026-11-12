@@ -1,0 +1,45 @@
+{% extends 'admin/base.html' %}
+{% block title %}Configuration{% endblock %}
+{% block content %}
+<header class="config-page-heading">
+  <div><p class="dashboard-eyebrow">HOTEL SETUP</p><h1>Configuration management</h1><p>Manage your brand and reusable hotel configuration without editing application code.</p></div>
+  <div class="config-heading-actions"><a class="btn sm plain" href="{{url_for('admin.configuration_onboarding')}}">Open setup wizard</a><a class="btn sm" href="{{url_for('admin.configuration_export')}}">Export JSON</a></div>
+</header>
+<section class="config-safety-note" role="note"><strong>Safe by design</strong><span>Configuration edits never rewrite reservations, payment records or transaction history. API keys, passwords and provider secrets are kept in deployment environment variables and are never included in exports.</span></section>
+{% if not setup_complete %}<section class="config-welcome card"><div><p class="dashboard-eyebrow">GET STARTED</p><h2>Make this hotel yours</h2><p>Use the guided setup to set the hotel identity, brand colors and website domain, then complete the operational checklist.</p></div><a class="btn" href="{{url_for('admin.configuration_onboarding')}}">Start hotel setup <span aria-hidden="true">→</span></a></section>{% endif %}
+<section class="config-grid" aria-label="Configuration readiness checklist">
+  {% for title,ready,href in checks %}
+  <a class="config-check card {{'is-ready' if ready else 'is-pending'}}" href="{{href}}">
+    <span class="config-check-icon" aria-hidden="true">{{'✓' if ready else '○'}}</span>
+    <span><strong>{{title}}</strong><small>{{'Ready' if ready else 'Review required'}}</small></span><span class="config-check-arrow" aria-hidden="true">→</span>
+  </a>
+  {% endfor %}
+</section>
+<section class="config-resources card">
+  <header><div><p class="dashboard-eyebrow">EXISTING HOTEL MODULES</p><h2>Property and operations</h2><p>These features keep their existing data models and approval safeguards.</p></div></header>
+  <div class="config-resource-links">
+    <a href="{{url_for('admin.settings')}}"><strong>Property details &amp; contact</strong><span>Property addresses, phone, email, WhatsApp and map links</span></a>
+    <a href="{{url_for('admin.categories')}}"><strong>Room categories, tariffs &amp; tax</strong><span>Rates, occupancy and publication approvals</span></a>
+    <a href="{{url_for('admin.rooms')}}"><strong>Room inventory</strong><span>Rooms, amenities, photographs and availability</span></a>
+    <a href="{{url_for('admin.dynamic_pricing')}}"><strong>Offers &amp; dynamic pricing</strong><span>Manage active pricing rules and date-based rates</span></a>
+    <a href="{{url_for('admin.media_page')}}"><strong>Hotel imagery</strong><span>Approved room images, homepage slides and gallery content</span></a>
+  </div>
+</section>
+<section class="card config-editor">
+  <header><div><p class="dashboard-eyebrow">ADVANCED EDITOR</p><h2>Hotel configuration JSON</h2><p>Configuration schema version {{config.schema_version}}. Unsupported fields, unsafe assets and secrets are rejected.</p></div></header>
+  <form method="post" action="{{url_for('admin.configuration_save')}}">
+    <input type="hidden" name="csrf_token" value="{{csrf_token()}}">
+    <label for="hotel-configuration">Editable configuration</label>
+    <textarea id="hotel-configuration" name="configuration" rows="28" spellcheck="false" autocapitalize="off">{{config_json}}</textarea>
+    <div class="config-form-actions"><button class="btn">Validate and save</button><span>For onboarding, use the guided setup above. Property and room data is managed in the existing modules.</span></div>
+  </form>
+</section>
+<section class="card config-import">
+  <div><p class="dashboard-eyebrow">PORTABLE HOTEL CONFIGURATION</p><h2>Import a validated JSON export</h2><p>On an empty installation, the import can also create the exported property, category and room records. On an installation with existing hotel data, those records must match exactly; use the existing screens to change inventory so current or historical bookings cannot be altered.</p></div>
+  <form method="post" action="{{url_for('admin.configuration_import')}}" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{csrf_token()}}">
+    <label for="configuration-file">Configuration file <input id="configuration-file" name="config_file" type="file" accept=".json,application/json" required></label>
+    <button class="btn ghost">Validate and import</button>
+  </form>
+</section>
+{% endblock %}

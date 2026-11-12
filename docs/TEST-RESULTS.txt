@@ -1,4 +1,7 @@
-test_block_room_and_status_board (tests.test_booking.T.test_block_room_and_status_board) ... ok
+test_block_room_and_status_board (tests.test_booking.T.test_block_room_and_status_board) ... C:\Users\Rajesh Singh\VijayHospitalityPlatform\app\__init__.py:22: ResourceWarning: unclosed file <_io.TextIOWrapper name='C:\\Users\\Rajesh Singh\\VijayHospitalityPlatform\\app\\static\\img\\manifest.json' mode='r' encoding='utf-8'>
+  import json;mf=os.path.join(app.static_folder,'img','manifest.json');app.jinja_env.globals['IMG']=(json.load(open(mf,encoding='utf-8')) if os.path.exists(mf) else {})
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
 test_book_ac_and_non_ac (tests.test_booking.T.test_book_ac_and_non_ac) ... ok
 test_check_in_out_and_reassign (tests.test_booking.T.test_check_in_out_and_reassign) ... ok
 test_database_refuses_double_booking_even_if_code_is_bypassed (tests.test_booking.T.test_database_refuses_double_booking_even_if_code_is_bypassed) ... ok
@@ -9,21 +12,81 @@ test_modify_cancel_and_inventory_release (tests.test_booking.T.test_modify_cance
 test_search_available_and_unavailable (tests.test_booking.T.test_search_available_and_unavailable) ... ok
 test_simultaneous_requests_only_one_wins (tests.test_booking.T.test_simultaneous_requests_only_one_wins) ... ok
 test_validation (tests.test_booking.T.test_validation) ... ok
-test_cannot_book_room_that_was_never_searched_or_with_negative_reply (tests.test_payments_ai_web.AI.test_cannot_book_room_that_was_never_searched_or_with_negative_reply) ... ok
+test_configuration_admin_and_public_brand_render (tests.test_configuration.ConfigurationTests.test_configuration_admin_and_public_brand_render) ... ok
+test_configuration_rejects_secrets_unsupported_fields_and_unsafe_assets (tests.test_configuration.ConfigurationTests.test_configuration_rejects_secrets_unsupported_fields_and_unsafe_assets) ... ok
+test_configured_notification_template_is_used (tests.test_configuration.ConfigurationTests.test_configured_notification_template_is_used) ... ok
+test_export_contains_catalog_but_never_environment_secrets (tests.test_configuration.ConfigurationTests.test_export_contains_catalog_but_never_environment_secrets) ... ok
+test_import_of_changed_catalog_is_rejected_when_hotel_data_exists (tests.test_configuration.ConfigurationTests.test_import_of_changed_catalog_is_rejected_when_hotel_data_exists) ... ok
+test_onboarding_changes_brand_without_changing_existing_booking_or_property (tests.test_configuration.ConfigurationTests.test_onboarding_changes_brand_without_changing_existing_booking_or_property) ... ok
+test_sample_configuration_imports_only_into_an_empty_installation (tests.test_configuration.ConfigurationTests.test_sample_configuration_imports_only_into_an_empty_installation) ... ok
+test_sample_second_hotel_export_is_valid_and_not_live (tests.test_configuration.ConfigurationTests.test_sample_second_hotel_export_is_valid_and_not_live) ... ok
+test_caps_limit_increase_and_discount (tests.test_dynamic_pricing_media.DynamicPricingTests.test_caps_limit_increase_and_discount) ... ok
+test_disabled_mode_keeps_base_rate (tests.test_dynamic_pricing_media.DynamicPricingTests.test_disabled_mode_keeps_base_rate) ... ok
+test_invalid_dates_are_rejected (tests.test_dynamic_pricing_media.DynamicPricingTests.test_invalid_dates_are_rejected) ... ok
+test_occupancy_surge (tests.test_dynamic_pricing_media.DynamicPricingTests.test_occupancy_surge) ... ok
+test_reservation_keeps_booking_time_dynamic_price (tests.test_dynamic_pricing_media.DynamicPricingTests.test_reservation_keeps_booking_time_dynamic_price) ... ok
+test_room_override_precedes_seasonal_rate (tests.test_dynamic_pricing_media.DynamicPricingTests.test_room_override_precedes_seasonal_rate) ... ok
+test_seasonal_rate_is_dynamic_base (tests.test_dynamic_pricing_media.DynamicPricingTests.test_seasonal_rate_is_dynamic_base) ... ok
+test_weekend_uplift (tests.test_dynamic_pricing_media.DynamicPricingTests.test_weekend_uplift) ... ok
+test_admin_saves_and_audits_dynamic_rule_and_media (tests.test_dynamic_pricing_media.FeatureRoutesAndReceptionTests.test_admin_saves_and_audits_dynamic_rule_and_media) ... ok
+test_public_pricing_media_and_admin_pages_render (tests.test_dynamic_pricing_media.FeatureRoutesAndReceptionTests.test_public_pricing_media_and_admin_pages_render) ... C:\Users\Rajesh Singh\VijayHospitalityPlatform\app\__init__.py:22: ResourceWarning: unclosed file <_io.TextIOWrapper name='C:\\Users\\Rajesh Singh\\VijayHospitalityPlatform\\app\\static\\img\\manifest.json' mode='r' encoding='utf-8'>
+  import json;mf=os.path.join(app.static_folder,'img','manifest.json');app.jinja_env.globals['IMG']=(json.load(open(mf,encoding='utf-8')) if os.path.exists(mf) else {})
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_reception_modify_cancel_reports_and_exports (tests.test_dynamic_pricing_media.FeatureRoutesAndReceptionTests.test_reception_modify_cancel_reports_and_exports) ... ok
+test_delete_removes_main_and_thumbnail (tests.test_dynamic_pricing_media.MediaUploadTests.test_delete_removes_main_and_thumbnail) ... ok
+test_invalid_file_is_rejected (tests.test_dynamic_pricing_media.MediaUploadTests.test_invalid_file_is_rejected) ... C:\Users\Rajesh Singh\VijayHospitalityPlatform\app\__init__.py:22: ResourceWarning: unclosed file <_io.TextIOWrapper name='C:\\Users\\Rajesh Singh\\VijayHospitalityPlatform\\app\\static\\img\\manifest.json' mode='r' encoding='utf-8'>
+  import json;mf=os.path.join(app.static_folder,'img','manifest.json');app.jinja_env.globals['IMG']=(json.load(open(mf,encoding='utf-8')) if os.path.exists(mf) else {})
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_oversized_file_is_rejected (tests.test_dynamic_pricing_media.MediaUploadTests.test_oversized_file_is_rejected) ... C:\Users\Rajesh Singh\VijayHospitalityPlatform\app\__init__.py:22: ResourceWarning: unclosed file <_io.TextIOWrapper name='C:\\Users\\Rajesh Singh\\VijayHospitalityPlatform\\app\\static\\img\\manifest.json' mode='r' encoding='utf-8'>
+  import json;mf=os.path.join(app.static_folder,'img','manifest.json');app.jinja_env.globals['IMG']=(json.load(open(mf,encoding='utf-8')) if os.path.exists(mf) else {})
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_valid_image_is_resized_and_thumbnail_created (tests.test_dynamic_pricing_media.MediaUploadTests.test_valid_image_is_resized_and_thumbnail_created) ... ok
+test_cannot_book_room_that_was_never_searched_or_with_negative_reply (tests.test_payments_ai_web.AI.test_cannot_book_room_that_was_never_searched_or_with_negative_reply) ... C:\Users\Rajesh Singh\VijayHospitalityPlatform\app\__init__.py:22: ResourceWarning: unclosed file <_io.TextIOWrapper name='C:\\Users\\Rajesh Singh\\VijayHospitalityPlatform\\app\\static\\img\\manifest.json' mode='r' encoding='utf-8'>
+  import json;mf=os.path.join(app.static_folder,'img','manifest.json');app.jinja_env.globals['IMG']=(json.load(open(mf,encoding='utf-8')) if os.path.exists(mf) else {})
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_chat_history_is_restored_only_from_own_session (tests.test_payments_ai_web.AI.test_chat_history_is_restored_only_from_own_session) ... ok
 test_full_booking_conversation_uses_real_backend (tests.test_payments_ai_web.AI.test_full_booking_conversation_uses_real_backend) ... ok
+test_local_receptionist_searches_live_inventory_in_english_and_hindi (tests.test_payments_ai_web.AI.test_local_receptionist_searches_live_inventory_in_english_and_hindi) ... ok
 test_lookup_cancel_and_handover (tests.test_payments_ai_web.AI.test_lookup_cancel_and_handover) ... ok
+test_receptionist_language_modes_and_hindi_fallback (tests.test_payments_ai_web.AI.test_receptionist_language_modes_and_hindi_fallback) ... ok
+test_unconfigured_fallback_collects_natural_stay_and_routes_events (tests.test_payments_ai_web.AI.test_unconfigured_fallback_collects_natural_stay_and_routes_events) ... ok
 test_unconfigured_is_honest (tests.test_payments_ai_web.AI.test_unconfigured_is_honest) ... ok
 test_failed_payment_keeps_booking_pending (tests.test_payments_ai_web.Pay.test_failed_payment_keeps_booking_pending) ... ok
 test_late_payment_after_expiry_revives_or_flags_refund (tests.test_payments_ai_web.Pay.test_late_payment_after_expiry_revives_or_flags_refund) ... ok
 test_manual_payment_and_refund_and_receipt (tests.test_payments_ai_web.Pay.test_manual_payment_and_refund_and_receipt) ... ok
+test_online_payment_order_stops_when_tax_is_unconfirmed (tests.test_payments_ai_web.Pay.test_online_payment_order_stops_when_tax_is_unconfirmed) ... ok
 test_successful_payment_requires_valid_signature (tests.test_payments_ai_web.Pay.test_successful_payment_requires_valid_signature) ... ok
 test_webhook_signature_and_capture (tests.test_payments_ai_web.Pay.test_webhook_signature_and_capture) ... ok
 test_account_lockout (tests.test_payments_ai_web.Web.test_account_lockout) ... ok
 test_admin_login_roles_and_csrf (tests.test_payments_ai_web.Web.test_admin_login_roles_and_csrf) ... ok
 test_admin_room_and_booking_management (tests.test_payments_ai_web.Web.test_admin_room_and_booking_management) ... ok
 test_api_availability_and_booking_conflict (tests.test_payments_ai_web.Web.test_api_availability_and_booking_conflict) ... ok
+test_availability_explains_unpublished_inventory (tests.test_payments_ai_web.Web.test_availability_explains_unpublished_inventory) ... ok
+test_category_configuration_keeps_missing_values_pending_then_publishes_real_inventory (tests.test_payments_ai_web.Web.test_category_configuration_keeps_missing_values_pending_then_publishes_real_inventory) ... ok
+test_contact_page_views_do_not_consume_submission_limit (tests.test_payments_ai_web.Web.test_contact_page_views_do_not_consume_submission_limit) ... ok
 test_dashboard_reports_and_exports_use_real_data (tests.test_payments_ai_web.Web.test_dashboard_reports_and_exports_use_real_data) ... ok
+test_dashboard_shows_complete_analytics_values (tests.test_payments_ai_web.Web.test_dashboard_shows_complete_analytics_values) ... ok
+test_guest_event_enquiry_is_saved_and_managed_by_admin (tests.test_payments_ai_web.Web.test_guest_event_enquiry_is_saved_and_managed_by_admin) ... ok
+test_inventory_setup_publishes_only_explicitly_confirmed_data (tests.test_payments_ai_web.Web.test_inventory_setup_publishes_only_explicitly_confirmed_data) ... ok
+test_inventory_setup_requires_review_and_applies_only_reviewed_data (tests.test_payments_ai_web.Web.test_inventory_setup_requires_review_and_applies_only_reviewed_data) ... ok
+test_owner_pages_and_finance_ledger_workflows (tests.test_payments_ai_web.Web.test_owner_pages_and_finance_ledger_workflows) ... ok
 test_public_booking_flow_and_manage (tests.test_payments_ai_web.Web.test_public_booking_flow_and_manage) ... ok
+test_public_page_templates_and_booking_entry_render (tests.test_payments_ai_web.Web.test_public_page_templates_and_booking_entry_render) ... ok
+test_receptionist_cannot_write_financial_entries (tests.test_payments_ai_web.Web.test_receptionist_cannot_write_financial_entries) ... ok
+test_room_search_api_uses_approved_categories_and_actual_inventory (tests.test_payments_ai_web.Web.test_room_search_api_uses_approved_categories_and_actual_inventory) ... ok
+test_search_explains_active_rooms_without_published_rates (tests.test_payments_ai_web.Web.test_search_explains_active_rooms_without_published_rates) ... ok
 test_security_headers_xss_and_sql_injection (tests.test_payments_ai_web.Web.test_security_headers_xss_and_sql_injection) ... ok
-Ran 27 tests in 6.389s
+test_tax_requires_admin_confirmation_and_updates_quotes (tests.test_payments_ai_web.Web.test_tax_requires_admin_confirmation_and_updates_quotes) ... ok
+test_unapproved_room_data_is_not_published_or_bookable (tests.test_payments_ai_web.Web.test_unapproved_room_data_is_not_published_or_bookable) ... ok
+test_unpriced_room_categories_are_visible_but_not_bookable (tests.test_payments_ai_web.Web.test_unpriced_room_categories_are_visible_but_not_bookable) ... ok
+test_admin_room_and_category_edits_are_reflected_in_search (tests.test_room_panorama.RoomPanoramaTests.test_admin_room_and_category_edits_are_reflected_in_search) ... ok
+test_search_displays_complete_room_details_and_panorama_upload_requires_photo_approval (tests.test_room_panorama.RoomPanoramaTests.test_search_displays_complete_room_details_and_panorama_upload_requires_photo_approval) ... ok
+
+----------------------------------------------------------------------
+Ran 72 tests in 52.650s
+
 OK

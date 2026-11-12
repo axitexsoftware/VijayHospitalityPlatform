@@ -3,7 +3,8 @@ import json,re,secrets,requests
 from datetime import date,timedelta
 from urllib.parse import urlencode
 from flask import current_app
-from ..db import setting
+from ..db import setting,get_db
+from ..configuration import load as hotel_configuration
 from ..util import now,now_s,today,inr
 from . import booking as B,notify
 LLM=None  # replaced in tests; default uses the configured provider
@@ -22,6 +23,7 @@ _t('cancel_booking','Cancel an upcoming booking after the customer explicitly co
 _t('escalate_to_human','Hand the conversation to a human receptionist (complaints, groups, events, discounts, anything you cannot answer).',{'reason':S('why')},['reason'])]
 def system_prompt(db,language='auto'):
     props=db.execute('SELECT name,kind,address FROM properties WHERE active=1').fetchall();n=now()
+    hotel=hotel_configuration(db,current_app.config);ai=hotel['integrations']['ai']
     inventory=B.inventory_configuration(db)
     _,tax_configured=B.tax_configuration(db)
     inventory_rule='Room numbers have been confirmed by management.' if inventory['rooms_confirmed'] else 'The room inventory is pending management confirmation. Do not identify room numbers or claim availability; direct guests to /contact?kind=room#enquiry.'
@@ -30,8 +32,11 @@ def system_prompt(db,language='auto'):
     photos_rule='Room photos have been confirmed as official property photos.' if inventory['photos_confirmed'] else 'Room photos are pending management approval. Do not show or describe room photos.'
     tax_rule='Tax has been confirmed in Admin.' if tax_configured else 'Tax has not been confirmed in Admin. Do not present any room subtotal as a final payable total or offer to create a booking; direct guests to the property team until this is configured.'
     language_rule={'en':'Respond in English.','hi':'Respond only in natural Hindi using Devanagari script.','auto':'Detect the language of the guest\'s latest message and reply in that same language. Switch immediately if the guest switches language.'}.get(language,'Detect the language of the guest\'s latest message and reply in that same language. Switch immediately if the guest switches language.')
-    return f"""You are Kabita, the Vijay Intelligent Reception Assistant for Vijay Utsav Hall in Manpur, Gaya, Bihar. Your tagline is 'Your Personal Hotel Receptionist'. Today is {n.strftime('%A %d %B %Y')} ({current_app.config['TIMEZONE']}).
+    configured_knowledge=f"\nHotel-provided instructions: {ai['instructions']}\nHotel knowledge base: {ai['knowledge_base']}" if ai['instructions'] or ai['knowledge_base'] else ''
+    brand_marker='Vijay' if hotel['brand']['name']=='Vijay Utsav Hall' else hotel['brand']['name'].split()[0]
+    return f"""You are {ai['assistant_name']}, the {brand_marker} Intelligent Reception Assistant for {hotel['brand']['name']}. Your tagline is 'Your Personal Hotel Receptionist'. Today is {n.strftime('%A %d %B %Y')} ({current_app.config['TIMEZONE']}).
 Properties: {'; '.join(f"{p['name']} ({p['kind']}) {p['address'] or ''}" for p in props)}.
+{configured_knowledge}
 Do not assume room categories, room amenities, arrival times, event capacity, packages, prices, taxes, payment methods or cancellation terms. Use live search results for room availability and quoted totals. For details that are not provided by a tool or shown in the guest's booking, direct the guest to the property team.
 Room-inventory status: {inventory_rule}
 Room-rate status: {rates_rule}
@@ -43,7 +48,8 @@ Rules: Be warm, brief and professional. Ask for missing details one or two at a 
 def llm_call(messages):
     c=current_app.config
     if not c['LLM_API_KEY']:raise RuntimeError('not configured')
-    r=requests.post(c['LLM_BASE_URL']+'/chat/completions',headers={'Authorization':'Bearer '+c['LLM_API_KEY']},json={'model':c['LLM_MODEL'],'messages':messages,'tools':TOOLS,'temperature':0.3},timeout=60)
+    ai=hotel_configuration(get_db(),c)['integrations']['ai']
+    r=requests.post(ai['base_url']+'/chat/completions',headers={'Authorization':'Bearer '+c['LLM_API_KEY']},json={'model':ai['model'],'messages':messages,'tools':TOOLS,'temperature':0.3},timeout=60)
     r.raise_for_status();return r.json()['choices'][0]['message']
 def conversation(db,token=None):
     if token:

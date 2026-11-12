@@ -786,3 +786,75 @@ body:not(.adm) .room-panorama-caption,body:not(.adm) .room-full-description{colo
   body:not(.adm) .room-card-photo{min-height:0;aspect-ratio:4/3}
   body:not(.adm) .room-card-rate{grid-column:auto;grid-template-columns:minmax(0,1fr) auto}
 }
+
+/* Shared premium hospitality refinements */
+body:not(.adm){font-size:16px;line-height:1.65}
+body:not(.adm) .wrap{width:min(1240px,calc(100% - 64px))}
+body:not(.adm) .hd{background:rgba(255,255,255,.97);box-shadow:0 3px 18px rgba(41,37,34,.055)}
+body:not(.adm) .hd .wrap{min-height:80px}
+body:not(.adm) .brand-logo{width:44px;height:44px;object-fit:contain;border-radius:4px}
+body:not(.adm) .logo{gap:12px}
+body:not(.adm) .logo span{line-height:1.2}
+body:not(.adm) .logo small{margin-top:4px}
+body:not(.adm) .nav{gap:3px}
+body:not(.adm) .nav a:not(.btn){padding:10px 11px;font-size:.84rem;white-space:nowrap}
+body:not(.adm) .nav a[aria-current=page]:not(.btn){background:transparent;color:var(--color-royal-wine);box-shadow:inset 0 -2px var(--color-antique-gold)}
+body:not(.adm) .hero{min-height:min(78svh,740px)}
+body:not(.adm) .hero::after{background:linear-gradient(90deg,rgba(24,22,20,.62),rgba(24,22,20,.12) 76%),linear-gradient(0deg,rgba(24,22,20,.54),transparent 58%)}
+body:not(.adm) .hero h1{max-width:13ch;line-height:.98;text-wrap:balance}
+body:not(.adm) .hero .lead{font-size:clamp(1.05rem,1.5vw,1.25rem)}
+body:not(.adm) .sec{padding-block:clamp(56px,7vw,92px)}
+body:not(.adm) .sec-h{margin-bottom:32px}
+body:not(.adm) .sec-h p{max-width:68ch;line-height:1.7}
+body:not(.adm) .card,body:not(.adm) .offer-card,body:not(.adm) .property-card{border-radius:10px}
+body:not(.adm) .card img{aspect-ratio:4/3}
+body:not(.adm) .btn{min-height:48px;border-radius:7px;letter-spacing:.01em}
+body:not(.adm) .guest-searchbar{box-shadow:0 8px 26px rgba(41,37,34,.08)}
+body:not(.adm) .form{border-radius:10px}
+body:not(.adm) .form input,body:not(.adm) .form select,body:not(.adm) .form textarea{min-height:48px}
+body:not(.adm) .form input:user-invalid,body:not(.adm) .form select:user-invalid,body:not(.adm) .form textarea:user-invalid{border-color:var(--color-danger-text);box-shadow:0 0 0 3px rgba(128,47,49,.09)}
+body:not(.adm) .hotel-room-list{gap:18px}
+body:not(.adm) .hotel-room-card{grid-template-columns:minmax(240px,30%) minmax(0,1fr) minmax(205px,24%);min-height:280px;border:1px solid var(--guest-line);border-radius:10px;box-shadow:0 5px 22px rgba(41,37,34,.055)}
+body:not(.adm) .room-card-photo{min-height:280px;aspect-ratio:4/3}
+body:not(.adm) .room-card-information{padding:22px}
+body:not(.adm) .room-card-information h3{margin:8px 0 6px;font-size:1.32rem}
+body:not(.adm) .room-card-description{font-size:.86rem;line-height:1.6;-webkit-line-clamp:3}
+body:not(.adm) .room-result-facts{gap:8px 16px;margin:12px 0;font-size:.78rem}
+body:not(.adm) .room-amenity-list{gap:7px;margin:12px 0}
+body:not(.adm) .room-amenity-list li{padding:5px 9px;border-radius:99px;font-size:.72rem}
+body:not(.adm) .room-card-rate{padding:22px 18px;background:var(--color-warm-ivory)}
+body:not(.adm) .room-average-price{font-size:1.42rem}
+body:not(.adm) .room-rate-disclosure>summary{min-height:42px;border-radius:6px;font-size:.78rem}
+body:not(.adm) .availability-guidance,body:not(.adm) .empty-state,body:not(.adm) .offer-empty{border-radius:10px}
+body:not(.adm) .empty-state{padding:clamp(24px,4vw,40px);background:var(--color-pure-white)}
+body:not(.adm) .empty-state h2{font-size:var(--type-subheading)}
+body:not(.adm) .ft{padding-top:64px}
+body:not(.adm) .ft .fine{padding-top:20px}
+body:not(.adm) :is(button,a,input,select,textarea):focus-visible{outline-color:var(--color-antique-gold);outline-offset:3px}
+@media(max-width:960px){
+  body:not(.adm) .wrap{width:min(100% - 40px,820px)}
+  body:not(.adm) .hd .wrap{min-height:72px}
+  body:not(.adm) .nav{top:72px}
+  body:not(.adm) .hotel-room-card{grid-template-columns:minmax(185px,32%) minmax(0,1fr) minmax(175px,25%)}
+}
+@media(max-width:760px){
+  body:not(.adm) .hd .wrap{min-height:68px}
+  body:not(.adm) .nav{top:68px}
+  body:not(.adm) .nav a:not(.btn){padding:12px 14px;font-size:.92rem}
+  body:not(.adm) .hero{min-height:min(82svh,680px)}
+  body:not(.adm) .hero::after{background:linear-gradient(0deg,rgba(24,22,20,.7),rgba(24,22,20,.08) 88%)}
+  body:not(.adm) .hero .wrap{width:calc(100% - 40px);padding:112px 0 34px}
+  body:not(.adm) .booking-layout{gap:16px}
+  body:not(.adm) .hotel-room-card{grid-template-columns:minmax(190px,38%) minmax(0,1fr);min-height:0}
+  body:not(.adm) .room-card-photo{min-height:250px;aspect-ratio:auto}
+  body:not(.adm) .room-card-information{padding:18px}
+  body:not(.adm) .room-card-rate{padding:16px}
+}
+@media(max-width:560px){
+  body:not(.adm) .wrap{width:calc(100% - 32px)}
+  body:not(.adm) .hero .wrap{width:calc(100% - 32px)}
+  body:not(.adm) .hero h1{font-size:clamp(2.5rem,12vw,3.8rem)}
+  body:not(.adm) .room-card-photo{aspect-ratio:4/3}
+  body:not(.adm) .room-card-information{padding:18px}
+  body:not(.adm) .room-card-rate{padding:16px}
+}

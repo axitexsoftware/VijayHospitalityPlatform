@@ -2,6 +2,7 @@ import os,logging
 from logging.handlers import RotatingFileHandler
 from flask import Flask,Request,render_template,request,g,session,current_app
 from . import config as cfgmod,db as dbm,security
+from . import configuration as hotel_config_module
 from .util import inr,d,today
 class HospitalityRequest(Request):
     @property
@@ -27,7 +28,21 @@ def create_app(**over):
     @app.context_processor
     def inject():
         from .payments_ui import razorpay_ready
-        return dict(user=getattr(g,'user',None),razorpay_ready=razorpay_ready(),today=today().isoformat(),tomorrow=(today()+__import__('datetime').timedelta(days=1)).isoformat())
+        db=dbm.get_db();hotel_config=hotel_config_module.load(db,current_app.config)
+        site_property=db.execute('SELECT * FROM properties WHERE active=1 ORDER BY id LIMIT 1').fetchone()
+        page_key={
+            'public.properties':'properties','public.rooms':'rooms','public.room':'room','public.search':'search',
+            'public.book':'booking','public.booking':'booking','public.lookup':'lookup','public.events':'events',
+            'public.offers':'offers','public.gallery':'gallery','public.facilities':'facilities','public.about':'about',
+            'public.contact':'contact','public.faq':'faq','public.privacy':'privacy',
+        }.get(request.endpoint)
+        page_metadata=hotel_config['pages']['metadata'].get(page_key,{}) if page_key else {}
+        visible_offers=[offer for offer in hotel_config['pages']['offers']
+            if offer.get('active') and (not offer.get('end_date') or offer['end_date']>=today().isoformat())]
+        return dict(user=getattr(g,'user',None),razorpay_ready=razorpay_ready(),today=today().isoformat(),
+            tomorrow=(today()+__import__('datetime').timedelta(days=1)).isoformat(),hotel_config=hotel_config,
+            site_url=hotel_config['website']['site_url'],site_property=site_property,page_metadata=page_metadata,
+            visible_offers=visible_offers)
     @app.errorhandler(404)
     def e404(e):return render_template('public/error.html',code=404,msg='Page not found'),404
     @app.errorhandler(403)

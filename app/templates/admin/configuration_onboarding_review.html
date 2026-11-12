@@ -1,0 +1,12 @@
+{% extends 'admin/base.html' %}
+{% block title %}Hotel setup · Launch review{% endblock %}
+{% block content %}
+<header class="config-page-heading"><div><p class="dashboard-eyebrow">NEW HOTEL ONBOARDING · STEP 3 OF 3</p><h1>Review launch readiness</h1><p>Confirm deployment details and integrations before inviting guests to use the site.</p></div><a class="btn sm plain" href="{{url_for('admin.configuration_onboarding',step=2)}}">Back to operations</a></header>
+<ol class="config-wizard-steps" aria-label="Onboarding progress"><li class="active"><span>✓</span><strong>Identity</strong></li><li class="active"><span>✓</span><strong>Operations</strong></li><li class="active"><span>3</span><strong>Launch review</strong></li></ol>
+<section class="config-safety-note" role="note"><strong>Credentials are not in this checklist export</strong><span>Payment, AI, email and WhatsApp secrets must be set on the server. Domain DNS, HTTPS, backups and monitoring are deployment tasks, not changed by saving this admin configuration.</span></section>
+<section class="config-checklist">
+  {% for title,ready,href in checks %}<a class="config-check card {{'is-ready' if ready else 'is-pending'}}" href="{{href}}"><span class="config-check-icon" aria-hidden="true">{{'✓' if ready else '○'}}</span><span><strong>{{title}}</strong><small>{{'Ready' if ready else 'Review required'}}</small></span><span class="config-check-arrow" aria-hidden="true">→</span></a>{% endfor %}
+</section>
+<section class="config-brand-preview card"><div class="config-brand-swatch" style="background:{{config.brand.colors.primary}}"><span>{{config.brand.name[:1]}}</span></div><div><p class="dashboard-eyebrow">BRAND PREVIEW</p><h2>{{config.brand.name}}</h2><p>{{config.brand.tagline}}</p><small>{{config.website.site_url}} · {{config.website.default_language|upper}} · {{config.website.currency}}</small></div></section>
+<form method="post" class="config-wizard-actions"><input type="hidden" name="csrf_token" value="{{csrf_token()}}"><input type="hidden" name="step" value="complete"><a class="text-link" href="{{url_for('admin.configuration_page')}}">Save and exit</a><button class="btn">Mark setup complete</button></form>
+{% endblock %}

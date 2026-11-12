@@ -128,8 +128,9 @@ class Web(Base):
         self.db.execute("INSERT INTO room_images(room_id,path,alt,sort) VALUES(1,'img/room-ac-480.avif','Test AC room',0)")
         grouped=c.get('/search',query_string={'ci':day(10),'co':day(12),'adults':2,'rooms':2}).get_data(as_text=True)
         self.assertIn('2 requested',grouped);self.assertIn('View details',grouped);self.assertIn('Enquire about 2 rooms',grouped);self.assertNotIn('Book this room',grouped);self.assertIn('Each reservation is confirmed separately',grouped)
-        for detail in ('Manpur, Gaya','Up to 2 adults','Nightly rate breakdown','18 Nov','Room charges','Total'):
+        for detail in ('Manpur, Gaya','Up to 2 adults','Nightly rate breakdown','Room charges','Total'):
             self.assertIn(detail,grouped)
+        self.assertIn(dtm.date.fromisoformat(day(10)).strftime('%d %b'),grouped)
         for control in ('Select a room and rate','filter-room-type','filter-facility','sort-rooms','data-clear-filters','data-room-photo','Rates from','View Rates','data-rate-total-label','search.js'):
             self.assertIn(control,grouped)
         facilities=c.get('/facilities').get_data(as_text=True);self.assertIn('Details to confirm',facilities);self.assertIn('Accessibility and luggage assistance',facilities)

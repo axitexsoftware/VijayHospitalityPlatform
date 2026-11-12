@@ -1,0 +1,119 @@
+{
+  "format": "vijay-hospitality-configuration",
+  "configuration": {
+    "schema_version": 1,
+    "brand": {
+      "name": "Sample Garden Hotel — DEMONSTRATION ONLY",
+      "tagline": "Example configuration; replace before launch",
+      "theme": "garden",
+      "colors": {
+        "primary": "#315447",
+        "accent": "#B18A4A",
+        "background": "#F5F2E9",
+        "surface": "#FFFFFF",
+        "text": "#292725"
+      },
+      "fonts": {
+        "heading": "Playfair Display",
+        "body": "Lato"
+      }
+    },
+    "website": {
+      "site_url": "https://sample-hotel.example.com",
+      "primary_domain": "sample-hotel.example.com",
+      "default_language": "en",
+      "supported_languages": [
+        "en",
+        "hi"
+      ],
+      "currency": "INR"
+    },
+    "pages": {
+      "home": {
+        "eyebrow": "SAMPLE CONFIGURATION",
+        "title": "Sample Garden Hotel",
+        "subtitle": "Demonstration content — not for production",
+        "description": "This sample configuration demonstrates hotel identity and page content. Replace all example text and add approved hotel information before publishing."
+      },
+      "about": {
+        "title": "About the sample hotel",
+        "description": "Demonstration content only. Replace with verified property details."
+      },
+      "events": {
+        "title": "Sample event enquiries",
+        "description": "Demonstration content only. Capacity, packages, availability and prices are not confirmed."
+      },
+      "policies": {
+        "check_in": "Sample only. Confirm arrival arrangements with the hotel.",
+        "cancellation": "Sample only. Add the hotel's approved cancellation policy.",
+        "children": "Sample only. Confirm occupancy rules with the hotel.",
+        "pets": "Sample only. Confirm arrangements with the hotel."
+      }
+    },
+    "integrations": {
+      "email": {
+        "from_name": "Sample Garden Hotel",
+        "from_email": ""
+      },
+      "whatsapp": {
+        "display_phone": ""
+      },
+      "ai": {
+        "provider": "openai-compatible",
+        "base_url": "https://api.openai.com/v1",
+        "model": "gpt-4o-mini",
+        "assistant_name": "Sample Assistant",
+        "instructions": "",
+        "knowledge_base": ""
+      },
+      "payments": {
+        "provider": "razorpay",
+        "currency": "INR"
+      }
+    },
+    "seo": {
+      "title": "Sample Garden Hotel — DEMONSTRATION ONLY",
+      "description": "Example metadata. Replace before launch.",
+      "keywords": "",
+      "og_image": ""
+    },
+    "deployment": {
+      "primary_domain": "sample-hotel.example.com",
+      "site_url": "https://sample-hotel.example.com"
+    }
+  },
+  "properties": [
+    {
+      "slug": "sample-garden",
+      "name": "Sample Garden Hotel — DEMONSTRATION ONLY",
+      "kind": "hotel",
+      "address": "Example District, Example State",
+      "phone": null,
+      "email": null,
+      "whatsapp": null,
+      "map_url": null,
+      "description": "Example record only. Not a real hotel listing.",
+      "active": 0
+    }
+  ],
+  "room_categories": [
+    {
+      "property_slug": "sample-garden",
+      "name": "Sample room category — DEMONSTRATION ONLY",
+      "room_type": "Sample category",
+      "ac": 1,
+      "description": "Example category; requires hotel-specific details and admin approval.",
+      "base_price_paise": 0,
+      "max_adults": 2,
+      "max_children": 0,
+      "nightly_rate_paise": null,
+      "max_adults_approved": null,
+      "max_children_approved": null,
+      "max_occupancy": null,
+      "currency": "INR",
+      "tax_percent": null,
+      "active": 0
+    }
+  ],
+  "rooms": []
+}
