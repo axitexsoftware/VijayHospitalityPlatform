@@ -41,6 +41,14 @@
         {{s.bar(f,cats,today)}}
       </details>
     </section>
+    {% if user and has_perm(user.role,'rooms') %}
+    <aside class="availability-guidance" aria-label="Search content management">
+      <strong>Manage search content:</strong>
+      <a href="{{url_for('admin.settings')}}">Property details</a> ·
+      <a href="{{url_for('admin.categories')}}">Room types, rates and publication</a> ·
+      <a href="{{url_for('admin.rooms')}}">Room details, photos and availability</a>
+    </aside>
+    {% endif %}
     {% endif %}
 
     {% if res is none or err %}

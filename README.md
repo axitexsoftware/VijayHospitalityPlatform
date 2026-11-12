@@ -36,6 +36,7 @@ gunicorn -w 2 -b 127.0.0.1:8000 wsgi:app     # production behind nginx; set TRUS
 ```
 Then sign in at `/admin/login` and: **Settings** (verify both addresses, phone, WhatsApp, map links) → **Categories and rates** (set a price; rooms with no price are not
 bookable) → **Rooms** (add real rooms, photos, amenities) → test a booking on the website.
+Search content is database-backed: Settings controls property/contact details; Categories and rates controls room type, category description, occupancy, rates, tax and whether the category is published; Rooms controls individual room number, floor, description, amenities, optional price, photos and 360° panorama. Save and approve/publish required category details before they appear publicly. Availability is computed from active rooms, reservations and room blocks. Admins and owners also get management links on search results when signed in. Search-page labels and layout are application UI, not editable property content.
 ## 5. Tests
 ```bash
 python -m unittest discover -s tests -t . -v      # 27 tests; results in docs/TEST-RESULTS.txt
