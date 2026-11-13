@@ -1,11 +1,51 @@
 {% extends 'admin/base.html' %}{% block title %}Images and gallery{% endblock %}
-{% block content %}<h1>Images and gallery</h1>
-<div class="row" style="margin-bottom:14px"><a class="btn sm {{'plain' if kind!='room'}}" href="{{url_for('admin.media_page',kind='room')}}">Room photos</a><a class="btn sm {{'plain' if kind!='slide'}}" href="{{url_for('admin.media_page',kind='slide')}}">Homepage slides</a><a class="btn sm {{'plain' if kind!='gallery'}}" href="{{url_for('admin.media_page',kind='gallery')}}">Gallery</a></div>
-<div class="card"><h2>Upload {{kind|label}}</h2><form method="post" action="{{url_for('admin.media_upload')}}" enctype="multipart/form-data" class="row"><input type="hidden" name="csrf_token" value="{{csrf_token()}}"><input type="hidden" name="kind" value="{{kind}}">
-{% if kind=='room' %}<label>Room category<select name="category_id" required>{% for c in cats %}<option value="{{c.id}}">{{c.pname}}: {{c.name}}</option>{% endfor %}</select></label>{% else %}<label>Property (optional)<select name="property_id"><option value="">All properties</option>{% for p in props %}<option value="{{p.id}}">{{p.name}}</option>{% endfor %}</select></label>{% endif %}
-<label>Image files (JPEG, PNG, WebP; up to 8 MB each)<input type="file" name="images" accept="image/jpeg,image/png,image/webp" multiple required></label><label>Title<input name="title" maxlength="120"></label><label>Caption<input name="caption" maxlength="300"></label>{% if kind=='slide' %}<label>Button link (optional)<input name="link_url" maxlength="500" placeholder="/rooms or https://example.com"></label>{% endif %}<button class="btn sm">Upload images</button></form><p class="muted">Images are verified, rotated using EXIF orientation, resized to at most 1920 px, and saved with a 480 px thumbnail.</p></div>
-<div class="card"><h2>{{kind|label}} images</h2>{% for m in media_rows %}<form class="card row" method="post" action="{{url_for('admin.media_save',media_id=m.id)}}" style="display:flex;padding:12px;margin:12px 0"><input type="hidden" name="csrf_token" value="{{csrf_token()}}"><img src="{{url_for('static',filename=m.path.replace('.jpg','-480.jpg'))}}" alt="" width="140" height="100" style="object-fit:cover;border-radius:8px">
-{% if kind=='room' %}<label>Room category<select name="category_id">{% for c in cats %}<option value="{{c.id}}" {{'selected' if c.id==m.category_id}}>{{c.pname}}: {{c.name}}</option>{% endfor %}</select></label>{% else %}<label>Property<select name="property_id"><option value="">All properties</option>{% for p in props %}<option value="{{p.id}}" {{'selected' if p.id==m.property_id}}>{{p.name}}</option>{% endfor %}</select></label>{% endif %}
-<label>Title<input name="title" value="{{m.title or ''}}" maxlength="120"></label><label>Caption<input name="caption" value="{{m.caption or ''}}" maxlength="300"></label>{% if kind=='slide' %}<label>Button link<input name="link_url" value="{{m.link_url or ''}}" maxlength="500"></label>{% endif %}
-<label>Order<input name="sort" type="number" min="0" max="100000" value="{{m.sort}}" style="width:80px"></label><label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" name="active" {{'checked' if m.active}}> Visible</label><button class="btn sm">Save</button></form>
-<form method="post" action="{{url_for('admin.media_delete',media_id=m.id)}}" data-confirm="Delete this image and its files?"><input type="hidden" name="csrf_token" value="{{csrf_token()}}"><button class="btn sm danger">Delete</button></form>{% else %}<p class="muted">No {{kind}} images uploaded yet.</p>{% endfor %}</div>{% endblock %}
+{% block content %}
+<h1>Images and gallery</h1>
+<nav class="admin-filter-bar media-kind-tabs" aria-label="Image collection">
+  <a class="btn sm {{'plain' if kind!='room'}}" href="{{url_for('admin.media_page',kind='room')}}">Room photos</a>
+  <a class="btn sm {{'plain' if kind!='slide'}}" href="{{url_for('admin.media_page',kind='slide')}}">Homepage slides</a>
+  <a class="btn sm {{'plain' if kind!='gallery'}}" href="{{url_for('admin.media_page',kind='gallery')}}">Gallery</a>
+</nav>
+<section class="card media-upload">
+  <h2>Upload {{kind|label}}</h2>
+  <form method="post" action="{{url_for('admin.media_upload')}}" enctype="multipart/form-data" class="row media-upload-form">
+    <input type="hidden" name="csrf_token" value="{{csrf_token()}}"><input type="hidden" name="kind" value="{{kind}}">
+    {% if kind=='room' %}
+    <label>Room category<select name="category_id" required>{% for c in cats %}<option value="{{c.id}}">{{c.pname}}: {{c.name}}</option>{% endfor %}</select></label>
+    {% else %}
+    <label>Property (optional)<select name="property_id"><option value="">All properties</option>{% for p in props %}<option value="{{p.id}}">{{p.name}}</option>{% endfor %}</select></label>
+    {% endif %}
+    <label class="media-file-field">Image files (JPEG, PNG, WebP; up to 8 MB each)<input type="file" name="images" accept="image/jpeg,image/png,image/webp" multiple required></label>
+    <label>Title<input name="title" maxlength="120"></label>
+    <label>Caption<input name="caption" maxlength="300"></label>
+    {% if kind=='slide' %}<label>Button link (optional)<input name="link_url" maxlength="500" placeholder="/rooms or https://example.com"></label>{% endif %}
+    <button class="btn sm">Upload images</button>
+  </form>
+  <p class="muted media-guidance">Images are verified, rotated using EXIF orientation, resized to at most 1920 px, and saved with a 480 px thumbnail.</p>
+</section>
+<section class="card media-library">
+  <h2>{{kind|label}} images</h2>
+  {% for m in media_rows %}
+  <article class="media-item">
+    <form class="row media-edit-form" method="post" action="{{url_for('admin.media_save',media_id=m.id)}}">
+      <input type="hidden" name="csrf_token" value="{{csrf_token()}}">
+      <img class="media-thumbnail" src="{{url_for('static',filename=m.path.replace('.jpg','-480.jpg'))}}" alt="{{m.alt or m.title or kind|label}}">
+      {% if kind=='room' %}
+      <label>Room category<select name="category_id">{% for c in cats %}<option value="{{c.id}}" {{'selected' if c.id==m.category_id}}>{{c.pname}}: {{c.name}}</option>{% endfor %}</select></label>
+      {% else %}
+      <label>Property<select name="property_id"><option value="">All properties</option>{% for p in props %}<option value="{{p.id}}" {{'selected' if p.id==m.property_id}}>{{p.name}}</option>{% endfor %}</select></label>
+      {% endif %}
+      <label>Title<input name="title" value="{{m.title or ''}}" maxlength="120"></label>
+      <label>Caption<input name="caption" value="{{m.caption or ''}}" maxlength="300"></label>
+      {% if kind=='slide' %}<label>Button link<input name="link_url" value="{{m.link_url or ''}}" maxlength="500"></label>{% endif %}
+      <label class="media-order">Order<input name="sort" type="number" min="0" max="100000" value="{{m.sort}}"></label>
+      <label class="media-visible"><input type="checkbox" name="active" {{'checked' if m.active}}>Visible</label>
+      <button class="btn sm">Save</button>
+    </form>
+    <form class="media-delete-form" method="post" action="{{url_for('admin.media_delete',media_id=m.id)}}" data-confirm="Delete this image and its files?">
+      <input type="hidden" name="csrf_token" value="{{csrf_token()}}"><button class="btn sm danger">Delete</button>
+    </form>
+  </article>
+  {% else %}<p class="muted">No {{kind}} images uploaded yet.</p>{% endfor %}
+</section>
+{% endblock %}
