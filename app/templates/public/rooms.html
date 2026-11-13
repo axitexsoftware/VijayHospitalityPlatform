@@ -1,5 +1,122 @@
-{% extends 'public/base.html' %}{% import 'public/_m.html' as m %}
-{% block title %}Room Options in Manpur, Gaya | Vijay Hospitality{% endblock %}{% block desc %}Enquire about room options at Vijay Utsav and Vijay Garden, Manpur, Gaya. Rates, occupancy details and room photographs are subject to management confirmation.{% endblock %}
-{% block content %}<section class="sec"><div class="wrap">{{m.intro('Stay your way','Rooms and rates',('Compare available rooms, amenities and nightly rates for your dates.' if rooms else 'Room rates, occupancy details and photographs are subject to management confirmation. Contact our team for current details.'),'home','Vijay Utsav Hall hotel building with the paved lawn in front', '/search','Check dates and availability')}}<div class="listing-meta"><span>{% if rooms and tax_configured %}{{rooms|length}} bookable room{{'' if rooms|length==1 else 's'}}{% elif rooms %}{{rooms|length}} listed room{{'' if rooms|length==1 else 's'}} · online booking paused{% else %}Room details pending management confirmation{% endif %}</span><span>{% if rooms and tax_configured %}Prices shown per night · applicable tax is added at checkout{% elif rooms %}Tax confirmation pending · contact the property to confirm the final price{% else %}Ask our team to confirm current prices and availability{% endif %}</span></div>
-{% for r in rooms %}<article class="rc">{% if r.images %}<img src="{{url_for('static',filename=r.images[0].path)}}" alt="{{r.images[0].alt or r.cat_name}}" loading="lazy" width="800" height="600">{% elif r.cat_images %}<img src="{{url_for('static',filename=r.cat_images[0].path.replace('.jpg','-480.jpg'))}}" alt="{{r.cat_images[0].caption or r.cat_name}}" loading="lazy" width="480" height="360">{% else %}{{ m.room_img(r,r.cat_name+' room '+r.number) }}{% endif %}<div class="in"><span class="pill">{{r.pname}}</span><h3>{{r.cat_name}} · Room {{r.number}}</h3><p class="muted">{{r.description or r.cat_desc or ''}}</p><p class="muted">Occupancy details subject to management confirmation. <a href="/contact?kind=room#enquiry">Ask the property team.</a></p></div><div class="side"><div class="price">{{ r.display_price_paise|inr }} <small>/ night</small></div><a class="btn" href="/rooms/{{r.id}}">View room</a></div></article>
-{% else %}{% if room_previews %}<div class="room-preview-grid">{% for c in room_previews %}<article class="room-preview-card"><div class="room-preview-photo room-photo-placeholder"><span>Room photograph</span><small>Pending management approval</small></div><div class="room-preview-content"><span class="eyebrow">{{c.pname}}</span><h2>{{c.name}}</h2><p>Room facilities and occupancy details are subject to management confirmation.</p><div class="preview-rate"><strong>Rates on request</strong><span>Availability and occupancy details on request.</span></div><a class="btn" href="/contact?kind=room#enquiry">Ask about availability <span aria-hidden="true">→</span></a></div></article>{% endfor %}</div><aside class="room-listing-note"><div><span class="eyebrow">Planning a stay?</span><h2>Our team can confirm current rates and details.</h2></div><a class="btn ghost" href="/contact?kind=room#enquiry">Contact Vijay Hospitality</a></aside>{% else %}<div class="room-preview-grid"><article class="room-preview-card"><div class="room-preview-photo room-photo-placeholder"><span>Room photograph</span><small>Pending management approval</small></div><div class="room-preview-content"><span class="eyebrow">Room options</span><h2>Details pending management confirmation</h2><p>Room categories, rates, occupancy and inventory are not published yet.</p><div class="preview-rate"><strong>Rates on request</strong><span>Contact the property team for current details.</span></div><a class="btn" href="/contact?kind=room#enquiry">Ask about availability <span aria-hidden="true">→</span></a></div></article></div>{% endif %}{% endfor %}</div></section>{% endblock %}
+{% extends 'public/base.html' %}
+{% block title %}Rooms &amp; Suites | Vijay Utsav Hall{% endblock %}
+{% block desc %}Choose from management-listed rooms at Vijay Utsav Hall, Manpur, Gaya. Review room details and confirmed nightly rates, or contact the property team for current information.{% endblock %}
+
+{% block page_intro %}
+<section class="rh" aria-labelledby="rooms-title">
+  <div class="rh-photo">
+    <img src="{{ url_for('static', filename='img/room-101.jpg') }}" alt="Rooms and Suites at Vijay Utsav Hall" width="1600" height="900" fetchpriority="high">
+  </div>
+  <div class="rh-copy">
+    <span class="rh-eyebrow">Stay with comfort</span>
+    <h1 id="rooms-title">Rooms &amp; Suites</h1>
+    <p>Choose from our well-maintained rooms for a comfortable and relaxing stay at Vijay Utsav Hall.</p>
+  </div>
+</section>
+{% endblock %}
+
+{% block content %}
+<section class="rooms-section" aria-labelledby="rooms-list-title">
+  <section class="rooms-section" aria-label="Room listings">
+
+  {% if rooms %}
+    {% set ac_count = rooms|selectattr('ac')|list|length %}
+    <nav class="rooms-filters" aria-label="Filter rooms by air conditioning">
+      <button class="rooms-filter is-active" type="button" data-room-filter="all" aria-pressed="true">
+        All rooms <span>{{ rooms|length }}</span>
+      </button>
+      <button class="rooms-filter" type="button" data-room-filter="ac" aria-pressed="false">
+        AC rooms <span>{{ ac_count }}</span>
+      </button>
+      <button class="rooms-filter" type="button" data-room-filter="nonac" aria-pressed="false">
+        Non-AC rooms <span>{{ rooms|length - ac_count }}</span>
+      </button>
+      <span class="rooms-filter-status" data-room-count role="status" aria-live="polite">{{ rooms|length }} rooms shown</span>
+    </nav>
+
+    {% if not tax_configured %}
+      <p class="rooms-rate-note">Current rates and applicable taxes are being confirmed by the property team. Contact us for the latest pricing.</p>
+    {% endif %}
+
+    <div class="rooms-grid" data-rooms-grid>
+      {% for r in rooms %}
+        {% set description = r.description or r.cat_desc %}
+        <article class="rooms-listing-card" data-room-card data-room-type="{{ 'ac' if r.ac else 'nonac' }}">
+          <div class="rooms-card-photo">
+            {% if r.images %}
+              <img src="{{url_for('static',filename='img/room-10'~loop.index~'.jpg')}}" alt="{{r.cat_name}} room {{r.number}}" loading="lazy" width="800" height="600">
+            {% elif r.cat_images %}
+              <img src="{{ url_for('static', filename=r.cat_images[0].path) }}" alt="{{ r.cat_images[0].caption or r.cat_images[0].title or r.cat_name }}" loading="lazy" decoding="async" width="800" height="600">
+            {% elif r.image and IMG.get(r.image) %}
+              {% set image_width = IMG[r.image].ws[-1] %}
+              <img src="{{ url_for('static', filename='img/' ~ r.image ~ '-' ~ image_width ~ '.jpg') }}" alt="{{ r.cat_name }} room" loading="lazy" decoding="async" width="{{ IMG[r.image].w }}" height="{{ IMG[r.image].h }}">
+            {% else %}
+              <div class="rooms-photo-pending"><span>Room photograph</span><small>Pending property approval</small></div>
+            {% endif %}
+            <span class="rooms-card-badge">{{ 'AC room' if r.ac else 'Non-AC room' }}</span>
+          </div>
+          <div class="rooms-card-body">
+            <p class="rooms-card-property">{{ r.pname }}</p>
+            <h3>{{ r.cat_name }} <span>· Room {{ r.number }}</span></h3>
+            {% if description and 'test data only' not in description|lower %}
+              <p class="rooms-card-description">{{ description }}</p>
+            {% else %}
+              <p class="rooms-card-description">Room details can be confirmed with the property team.</p>
+            {% endif %}
+            {% if r.ac %}
+              <ul class="rooms-card-amenities" aria-label="Room facilities">
+                <li><span aria-hidden="true">✦</span> Air conditioning</li>
+              </ul>
+            {% endif %}
+            <div class="rooms-card-footer">
+              <div class="rooms-card-price">
+                {% if tax_configured and r.display_price_paise %}
+                  <strong>{{ r.display_price_paise|inr }}</strong>
+                  <span>per night</span>
+                {% else %}
+                  <strong>Rate on request</strong>
+                  <span>Confirm with the property</span>
+                {% endif %}
+              </div>
+              <a class="btn" href="{{ url_for('public.room', rid=r.id) }}">View Room <span aria-hidden="true">→</span></a>
+            </div>
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+    <p class="rooms-filter-empty" data-room-empty hidden>No rooms match this filter.</p>
+  {% elif room_previews %}
+    <p class="rooms-rate-note">Room options are listed for reference. Contact the property team to confirm current rates, facilities and availability.</p>
+    <div class="rooms-grid rooms-preview-grid">
+      {% for c in room_previews %}
+        <article class="rooms-listing-card rooms-preview-card">
+          <div class="rooms-card-photo">
+            <div class="rooms-photo-pending"><span>Room photograph</span><small>Pending property approval</small></div>
+            <span class="rooms-card-badge">{{ 'AC room' if c.ac else 'Non-AC room' }}</span>
+          </div>
+          <div class="rooms-card-body">
+            <p class="rooms-card-property">{{ c.pname }}</p>
+            <h3>{{ c.name }}</h3>
+            <p class="rooms-card-description">Room details and facilities can be confirmed with the property team.</p>
+            <div class="rooms-card-footer">
+              <div class="rooms-card-price"><strong>Rates on request</strong><span>Subject to confirmation</span></div>
+              <a class="btn" href="/contact?kind=room#enquiry">Ask about rooms <span aria-hidden="true">→</span></a>
+            </div>
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="rooms-empty-state">
+      <span class="eyebrow">Plan your stay</span>
+      <h3>Room details are being confirmed</h3>
+      <p>Contact the property team for current room options, rates and availability.</p>
+      <a class="btn" href="/contact?kind=room#enquiry">Contact Vijay Hospitality <span aria-hidden="true">→</span></a>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/rooms.js') }}" defer></script>
+{% endblock %}

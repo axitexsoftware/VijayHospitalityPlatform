@@ -22,7 +22,37 @@ function toggle(){box.classList.toggle('open');open.setAttribute('aria-expanded'
 open.addEventListener('click',toggle);document.getElementById('chat-close').addEventListener('click',toggle);
 document.querySelectorAll('[data-open-chat]').forEach(function(button){button.addEventListener('click',function(){if(!box.classList.contains('open'))toggle()})});
 if(language)language.addEventListener('change',function(){try{localStorage.setItem(storageKey,language.value)}catch(e){}updateLanguageUI()});
-document.querySelectorAll('[data-chat-prompt]').forEach(function(button){button.addEventListener('click',function(){if(busy)return;inp.value=isHindi()?button.dataset.hi:button.dataset.en;form.requestSubmit()})});
+function localDate(d){return d.toLocaleDateString('en-CA')}
+function showDatePicker(){
+ if(log.querySelector('.chat-datecard'))return;
+ add(words('Please choose your check-in and check-out dates.','कृपया चेक-इन और चेक-आउट की तारीखें चुनें।'),'b');
+ var today=localDate(new Date()),card=document.createElement('div');
+ card.className='chat-datecard';
+ card.innerHTML='<label>'+words('Check-in','चेक-इन')+'<input type="date" class="dc-in" min="'+today+'"></label>'
+  +'<label>'+words('Check-out','चेक-आउट')+'<input type="date" class="dc-out" min="'+today+'"></label>'
+  +'<label>'+words('Adults','वयस्क')+'<input type="number" class="dc-adults" min="1" max="12" value="2"></label>'
+  +'<button type="button" class="dc-go">'+words('Check availability','उपलब्धता देखें')+'</button>';
+ log.appendChild(card);log.scrollTop=log.scrollHeight;
+ var ci=card.querySelector('.dc-in'),co=card.querySelector('.dc-out');
+ ci.addEventListener('change',function(){
+  var next=new Date(ci.value);next.setDate(next.getDate()+1);
+  co.min=localDate(next);
+  if(co.value&&co.value<=ci.value)co.value='';
+ });
+ card.querySelector('.dc-go').addEventListener('click',function(){
+  if(busy)return;
+  if(!ci.value||!co.value){alert(words('Please select both dates.','कृपया दोनों तारीखें चुनें।'));return}
+  var adults=card.querySelector('.dc-adults').value||1;
+  card.remove();
+  inp.value='Check room availability from '+ci.value+' to '+co.value+' for '+adults+' adults';
+  form.requestSubmit();
+ });
+}
+document.querySelectorAll('[data-chat-prompt]').forEach(function(button){button.addEventListener('click',function(){
+ if(busy)return;
+ if(button.dataset.en==='Check room availability'){showDatePicker();return}
+ inp.value=isHindi()?button.dataset.hi:button.dataset.en;form.requestSubmit();
+})});
 updateLanguageUI();
 inp.disabled=true;loadHistory();
 form.addEventListener('submit',function(e){e.preventDefault();var message=inp.value.trim();if(!message||busy)return;inp.value='';add(message,'u');busy=true;var typing=add(words('Typing…','लिख रहा/रही हूँ…'),'b');
@@ -33,3 +63,4 @@ form.addEventListener('submit',function(e){e.preventDefault();var message=inp.va
  .finally(function(){busy=false;log.scrollTop=log.scrollHeight})
 });
 })();
+

@@ -1,10 +1,92 @@
 {% extends 'public/base.html' %}{% import 'public/_m.html' as m %}
-{% block title %}Book Your Room | Vijay Hospitality{% endblock %}{% block robots %}<meta name="robots" content="noindex">{% endblock %}
-{% block content %}<section class="sec"><div class="wrap booking-wrap"><header class="booking-header"><div><span class="eyebrow">Almost there</span><h1>Review your stay</h1><p>Confirm the details below, then add your contact information.</p></div><a class="text-link" href="/search?ci={{f.ci}}&co={{f.co}}&adults={{f.adults}}&children={{f.children}}">Change room or dates</a></header><ol class="steps"><li>1. Search</li><li>2. Choose room</li><li class="on">3. Your details</li><li>4. Confirmation</li></ol><div class="booking-layout">
-<aside class="booking-summary">{% if room.cat_images %}<img src="{{url_for('static',filename=room.cat_images[0].path.replace('.jpg','-480.jpg'))}}" alt="{{room.cat_images[0].caption or room.cat_name}}" loading="lazy" width="480" height="360">{% elif room.images %}<img src="{{url_for('static',filename=room.images[0].path)}}" alt="{{room.images[0].alt or room.cat_name}}" loading="lazy" width="800" height="600">{% endif %}<div class="booking-summary-body"><span class="pill">{{room.pname}}</span><h2>{{room.cat_name}} · Room {{room.number}}</h2><dl class="kv"><dt>Check-in</dt><dd>{{f.ci|dmy}} · 12:00 PM</dd><dt>Check-out</dt><dd>{{f.co|dmy}} · 12:00 PM</dd><dt>Guests</dt><dd>{{f.adults}} adults, {{f.children or 0}} children</dd><dt>Room charges</dt><dd>{{room.quote.nights}} × {{ room.quote.avg|inr }} = {{ room.quote.room_total|inr }}</dd>{% if room.quote.tax %}<dt>Tax</dt><dd>{{ room.quote.tax|inr }}</dd>{% endif %}<dt class="total-label">Total</dt><dd class="total-value">{{ room.quote.total|inr }}</dd></dl><p class="summary-note">Your final total is shown above before you confirm.</p></div></aside>
-<form class="form" method="post" novalidate><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="room_id" value="{{f.room_id}}"><input type="hidden" name="ci" value="{{f.ci}}"><input type="hidden" name="co" value="{{f.co}}"><input type="hidden" name="adults" value="{{f.adults}}"><input type="hidden" name="children" value="{{f.children}}">
-<input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
-<div class="form-heading full"><span class="eyebrow">Guest details</span><h2>Who is staying?</h2><p>We use these details to manage your reservation.</p></div><label class="full">Full name<input name="name" value="{{vals.name}}" required autocomplete="name">{{ m.fe(errs,'name') }}</label><label>Mobile number<input name="phone" type="tel" value="{{vals.phone}}" required autocomplete="tel">{{ m.fe(errs,'phone') }}</label><label>Email <span class="field-optional">Optional</span><input name="email" type="email" value="{{vals.email}}" autocomplete="email">{{ m.fe(errs,'email') }}</label>
-<label class="full">Special requests <span class="field-optional">Optional</span><textarea name="notes" rows="3" maxlength="300">{{vals.notes}}</textarea></label>
-<fieldset class="full payment-choice"><legend>Choose payment</legend><label><input type="radio" name="pay_mode" value="hotel" checked><span><strong>Pay at the hotel</strong><small>Complete payment at the property.</small></span></label>{% if razorpay_ready %}<label><input type="radio" name="pay_mode" value="online"><span><strong>Pay securely online</strong><small>Room held for {{hold}} minutes while payment is completed.</small></span></label>{% endif %}</fieldset>
-{{ m.fe(errs,'form') }}{{ m.fe(errs,'guests') }}<button class="btn full" type="submit">Confirm booking <span aria-hidden="true">→</span></button><p class="note full">By continuing, you agree to our <a href="/privacy">privacy policy</a>. Your booking reference will appear after confirmation.</p></form></div></div></section>{% endblock %}
+{% block title %}Book Your Room | Vijay Hospitality{% endblock %}
+{% block robots %}<meta name="robots" content="noindex">{% endblock %}
+{% block content %}
+<style>
+.bk .booking-layout{display:grid!important;grid-template-columns:minmax(0,420px) minmax(0,1fr);gap:32px;align-items:start}
+.bk-summary{background:#fff;border:1px solid #e8e0d3;border-radius:24px;overflow:hidden;box-shadow:0 16px 40px rgba(0,0,0,.07);position:sticky;top:110px}
+.bk-summary img{width:100%;height:270px;object-fit:cover;display:block}
+.bk-body{padding:26px}
+.bk-body h2{margin:10px 0 18px;font-size:28px;line-height:1.15}
+.bk-body .pill{display:inline-block;background:#efe6d6;color:#7b2a3b;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:6px 14px;border-radius:999px}
+.bk-rows{display:grid;gap:0;margin:0}
+.bk-rows div{display:flex;justify-content:space-between;gap:16px;padding:12px 0;border-top:1px solid #eee6d9}
+.bk-rows dt{color:#6b6760}
+.bk-rows dd{margin:0;font-weight:600;text-align:right}
+.bk-total{display:flex;justify-content:space-between;align-items:center;margin-top:16px;padding:18px 22px;border-radius:18px;background:linear-gradient(135deg,#7b2a3b,#4f1a27);color:#fff}
+.bk-total span{text-transform:uppercase;letter-spacing:.1em;font-size:12px;opacity:.85}
+.bk-total strong{font-size:30px;color:#fff}
+.bk-note{margin:14px 0 0;color:#6b6760;font-size:13px}
+
+.bk .bk-form{background:#fff;border:1px solid #e8e0d3;border-radius:24px;padding:34px;box-shadow:0 16px 40px rgba(123,42,59,.08)}
+.bk-form input:not([type=radio]):not([type=hidden]),.bk-form textarea{width:100%;padding:14px;border:1px solid #d9cfbf;border-radius:12px;font:inherit;background:#fff}
+.bk-form input:focus,.bk-form textarea:focus{outline:0;border-color:#7b2a3b;box-shadow:0 0 0 3px rgba(123,42,59,.15)}
+.bk-form .payment-choice{border:0;padding:0;margin:0;display:grid;gap:12px}
+.bk-form .payment-choice legend{font-weight:700;margin-bottom:10px;font-size:18px}
+.bk-form .payment-choice label{display:flex;gap:14px;align-items:flex-start;padding:18px;border:2px solid #e8e0d3;border-radius:16px;cursor:pointer;background:#faf7f1;transition:.2s}
+.bk-form .payment-choice label:has(input:checked){border-color:#7b2a3b;background:#fff;box-shadow:0 8px 22px rgba(123,42,59,.12)}
+.bk-form .payment-choice input{width:auto!important;margin-top:4px;accent-color:#7b2a3b}
+.bk-form .payment-choice span{display:grid;gap:2px}
+.bk-form .btn.full{border-radius:14px;padding:17px;font-size:18px;transition:transform .2s,box-shadow .2s}
+.bk-form .btn.full:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(123,42,59,.3)}
+@media(max-width:960px){.bk .booking-layout{grid-template-columns:1fr}.bk-summary{position:static}.bk .bk-form{padding:22px}}
+</style>
+<section class="sec bk">
+<div class="wrap booking-wrap">
+  <header class="booking-header">
+    <div>
+      <span class="eyebrow">Almost there</span>
+      <h1>Review your stay</h1>
+      <p>Confirm the details below, then add your contact information.</p>
+    </div>
+    <a class="text-link" href="/search?ci={{f.ci}}&co={{f.co}}&adults={{f.adults}}&children={{f.children}}">Change room or dates</a>
+  </header>
+  <ol class="steps"><li>1. Search</li><li>2. Choose room</li><li class="on">3. Your details</li><li>4. Confirmation</li></ol>
+
+  <div class="booking-layout">
+    <aside class="bk-summary">
+      <img src="{{url_for('static',filename='img/room-101.jpg')}}" alt="{{room.cat_name}} room" width="800" height="600">
+      <div class="bk-body">
+        <span class="pill">{{room.pname}}</span>
+        <h2>{{room.cat_name}} · Room {{room.number}}</h2>
+        <dl class="bk-rows">
+          <div><dt>Check-in</dt><dd>{{f.ci|dmy}} · 12:00 PM</dd></div>
+          <div><dt>Check-out</dt><dd>{{f.co|dmy}} · 12:00 PM</dd></div>
+          <div><dt>Guests</dt><dd>{{f.adults}} adults, {{f.children or 0}} children</dd></div>
+          <div><dt>Room charges</dt><dd>{{room.quote.nights}} × {{ room.quote.avg|inr }} = {{ room.quote.room_total|inr }}</dd></div>
+          {% if room.quote.tax %}<div><dt>Tax</dt><dd>{{ room.quote.tax|inr }}</dd></div>{% endif %}
+        </dl>
+        <div class="bk-total"><span>Total</span><strong>{{ room.quote.total|inr }}</strong></div>
+        <p class="bk-note">Your final total is shown above before you confirm.</p>
+      </div>
+    </aside>
+
+    <form class="form bk-form" method="post" novalidate>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="room_id" value="{{f.room_id}}">
+      <input type="hidden" name="ci" value="{{f.ci}}">
+      <input type="hidden" name="co" value="{{f.co}}">
+      <input type="hidden" name="adults" value="{{f.adults}}">
+      <input type="hidden" name="children" value="{{f.children}}">
+      <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+
+      <div class="form-heading full"><span class="eyebrow">Guest details</span><h2>Who is staying?</h2><p>We use these details to manage your reservation.</p></div>
+      <label class="full">Full name<input name="name" value="{{vals.name}}" required autocomplete="name">{{ m.fe(errs,'name') }}</label>
+      <label>Mobile number<input name="phone" type="tel" value="{{vals.phone}}" required autocomplete="tel">{{ m.fe(errs,'phone') }}</label>
+      <label>Email <span class="field-optional">Optional</span><input name="email" type="email" value="{{vals.email}}" autocomplete="email">{{ m.fe(errs,'email') }}</label>
+      <label class="full">Special requests <span class="field-optional">Optional</span><textarea name="notes" rows="3" maxlength="300">{{vals.notes}}</textarea></label>
+
+      <fieldset class="full payment-choice">
+        <legend>Choose payment</legend>
+        <label><input type="radio" name="pay_mode" value="hotel" checked><span><strong>Pay at the hotel</strong><small>Complete payment at the property.</small></span></label>
+        {% if razorpay_ready %}<label><input type="radio" name="pay_mode" value="online"><span><strong>Pay securely online</strong><small>Room held for {{hold}} minutes while payment is completed.</small></span></label>{% endif %}
+      </fieldset>
+
+      {{ m.fe(errs,'form') }}{{ m.fe(errs,'guests') }}
+      <button class="btn full" type="submit">Confirm booking <span aria-hidden="true">→</span></button>
+      <p class="note full">By continuing, you agree to our <a href="/privacy">privacy policy</a>. Your booking reference will appear after confirmation.</p>
+    </form>
+  </div>
+</div>
+</section>
+{% endblock %}
