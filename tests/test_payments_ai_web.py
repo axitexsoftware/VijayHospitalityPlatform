@@ -46,11 +46,11 @@ class AI(Base):
         home=self.app.test_client().get('/').get_data(as_text=True)
         self.assertIn('data-ai-ready="false"',home)
     def test_receptionist_language_modes_and_hindi_fallback(self):
-        self.assertIn('Kabita, the Vijay Intelligent Reception Assistant',ai.system_prompt(self.db));self.assertIn('Respond only in natural Hindi using Devanagari',ai.system_prompt(self.db,'hi'));self.assertIn('Respond in English',ai.system_prompt(self.db,'en'))
+        self.assertIn('VIRA, the Vijay Intelligent Reception Assistant',ai.system_prompt(self.db));self.assertIn('Respond only in natural Hindi using Devanagari',ai.system_prompt(self.db,'hi'));self.assertIn('Respond in English',ai.system_prompt(self.db,'en'))
         ai.LLM=None;self.app.config['LLM_API_KEY']='';client=self.app.test_client();token=self.csrf(client,'/')
         hindi=client.post('/api/chat',json={'message':'कमरे की उपलब्धता बताइए','language':'auto'},headers={'X-CSRF-Token':token}).get_json()
         english=client.post('/api/chat',json={'message':'कमरे की उपलब्धता बताइए','language':'en'},headers={'X-CSRF-Token':token}).get_json()
-        self.assertIn('वर्चुअल रिसेप्शनिस्ट',hindi['reply']);self.assertIn('virtual receptionist',english['reply'].lower())
+        self.assertIn('चेक-इन तारीख',hindi['reply']);self.assertIn('check-in date',english['reply'].lower())
     def test_chat_history_is_restored_only_from_own_session(self):
         ai.LLM=None;self.app.config['LLM_API_KEY']='';first=self.app.test_client();csrf=self.csrf(first,'/')
         first.post('/api/chat',json={'message':'hello','language':'en'},headers={'X-CSRF-Token':csrf})
@@ -61,28 +61,71 @@ class AI(Base):
         self.assertEqual(len(first.get('/api/chat').get_json()['messages']),2)
     def test_local_receptionist_searches_live_inventory_in_english_and_hindi(self):
         ai.LLM=None;self.app.config['LLM_API_KEY']='';ci=day(10);co=day(12)
-        english=ai.reply(self.db,None,f'Find an AC room from {ci} to {co} for 2 adults','en')
-        self.assertIn('Live rooms available',english['reply']);self.assertIn('Room 101',english['reply']);self.assertTrue(english['link'].startswith('/search?'))
-        hindi=ai.reply(self.db,None,f'{ci} से {co} तक एसी कमरे की उपलब्धता देखें','auto')
-        self.assertIn('उपलब्ध',hindi['reply']);self.assertIn('Room 101',hindi['reply'])
+        english=ai.reply(self.db,None,f'Find an AC room from {ci} to {co} for 2 adults, 0 children, 1 room','en')
+        self.assertIn('available rooms',english['reply']);self.assertIn('Room 101',english['reply']);self.assertTrue(english['link'].startswith('/search?'))
+        hindi=ai.reply(self.db,None,f'{ci} से {co} तक एसी कमरे की उपलब्धता देखें, 2 वयस्क, 0 बच्चे, 1 कमरा','auto')
+        self.assertIn('कमरों',hindi['reply']);self.assertIn('Room 101',hindi['reply'])
         client=self.app.test_client();token=self.csrf(client,'/')
-        api=client.post('/api/chat',json={'message':f'Find an AC room from {ci} to {co}','language':'en'},headers={'X-CSRF-Token':token}).get_json()
-        self.assertIn('Live rooms available',api['reply']);self.assertTrue(api['link'].startswith('/search?'))
+        api=client.post('/api/chat',json={'message':f'Find an AC room from {ci} to {co} for 2 adults, 0 children, 1 room','language':'en'},headers={'X-CSRF-Token':token}).get_json()
+        self.assertIn('available rooms',api['reply']);self.assertTrue(api['link'].startswith('/search?'))
     def test_unconfigured_fallback_collects_natural_stay_and_routes_events(self):
         from datetime import timedelta
         from app.util import today
         ai.LLM=None;self.app.config['LLM_API_KEY']=''
         first=ai.reply(self.db,None,'book for room','en');self.assertIn('check-in date',first['reply'])
         tomorrow=(today()+timedelta(days=1)).isoformat();checkout=(today()+timedelta(days=3)).isoformat()
-        second=ai.reply(self.db,first['token'],'tomorrow for 2 nights','en')
-        self.assertIn('Live rooms available',second['reply']);self.assertIn('Room 101',second['reply']);self.assertIn(f'ci={tomorrow}',second['link']);self.assertIn(f'co={checkout}',second['link'])
+        second=ai.reply(self.db,first['token'],'tomorrow for 2 nights','en');self.assertIn('How many adults',second['reply'])
+        adults=ai.reply(self.db,first['token'],'2 adults','en');children=ai.reply(self.db,first['token'],'0 children','en')
+        rooms=ai.reply(self.db,first['token'],'1 room','en');category=ai.reply(self.db,first['token'],'AC Room','en')
+        self.assertIn('Room 101',category['reply']);self.assertIn(f'ci={tomorrow}',category['link']);self.assertIn(f'co={checkout}',category['link'])
         event=ai.reply(self.db,None,'I have an event enquiry','en')
         self.assertEqual(event['link'],'/contact?kind=event#enquiry');self.assertIn('event enquiry',event['reply'])
+    def test_vira_completes_pay_at_hotel_reservation_and_logs_notifications(self):
+        ai.LLM=None;self.app.config['LLM_API_KEY']=''
+        client=self.app.test_client();csrf=self.csrf(client,'/')
+        def send(message,lang='en'):
+            return client.post('/api/chat',json={'message':message,'language':lang},headers={'X-CSRF-Token':csrf}).get_json()
+        first=send('I want to book a room');self.assertIn('check-in date',first['reply'])
+        replies=[
+            (day(10),'check-out date'),(day(12),'How many adults'),('2 adults','How many children'),
+            ('0','How many rooms'),('1','prefer'),('AC Room','available rooms'),('101','full name'),
+            ('Asha Kumar','mobile number'),('9876543210','email address'),('asha@example.in','Pay at Hotel'),
+        ]
+        for answer,expected in replies:
+            result=send(answer);self.assertIn(expected,result['reply'])
+        self.db.execute('UPDATE room_categories SET nightly_rate_paise=220000 WHERE id=1')
+        stale=send('हाँ','auto')
+        self.assertIn('दर बदल गई',stale['reply']);self.assertIsNone(stale['booking'])
+        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM reservations').fetchone()[0],0)
+        booked=send('हाँ','auto')
+        self.assertTrue(booked['booking']);self.assertIn('बुकिंग की पुष्टि हो गई है',booked['reply'])
+        self.assertEqual(client.get('/booking/'+booked['booking']).status_code,200)
+        res=B.get_res(self.db,ref=booked['booking']);self.assertEqual(res['source'],'ai');self.assertEqual(res['status'],'confirmed')
+        self.assertEqual((res['cname'],res['cphone'],res['cemail']),('Asha Kumar','9876543210','asha@example.in'))
+        statuses={row['channel']:row['status'] for row in self.db.execute('SELECT channel,status FROM notifications WHERE reservation_id=?',(res['id'],))}
+        self.assertEqual(statuses.get('email'),'skipped');self.assertEqual(statuses.get('whatsapp'),'skipped')
+        followup=send('Thanks')
+        self.assertNotIn('confirm this reservation',followup['reply']);self.assertEqual(self.db.execute('SELECT COUNT(*) FROM reservations').fetchone()[0],1)
+    def test_vira_selects_garden_and_routes_multi_room_stays_to_existing_search(self):
+        ai.LLM=None;self.app.config['LLM_API_KEY']=''
+        self.db.execute("INSERT INTO properties(slug,name,kind,address) VALUES('garden','Vijay Garden','Hotel','Gaya')")
+        self.db.execute("""INSERT INTO room_categories(property_id,name,ac,base_price_paise,max_adults,max_children,room_type,
+            nightly_rate_paise,max_adults_approved,max_children_approved,max_occupancy,details_status,inventory_status,
+            occupancy_status,rates_status,tax_status,publication_status)
+            VALUES(2,'Garden AC',1,200000,2,1,'AC room',200000,2,1,3,'approved','approved','approved','approved','approved','published')""")
+        for number in ('G1','G2'):self.db.execute("INSERT INTO rooms(property_id,category_id,number) VALUES(2,3,?)",(number,))
+        first=ai.reply(self.db,None,'Check room availability','en');self.assertIn('Vijay Utsav',first['reply']);self.assertIn('Vijay Garden',first['reply'])
+        token=first['token'];result=ai.reply(self.db,token,'Vijay Garden','en');self.assertIn('check-in date',result['reply'])
+        for answer in (day(10),day(12),'2 adults','0 children','2 rooms','any category'):
+            result=ai.reply(self.db,token,answer,'en')
+        self.assertIn('multi-room bookings separately',result['reply']);self.assertIn('property_id=2',result['link']);self.assertIn('rooms=2',result['link'])
+        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM reservations').fetchone()[0],0)
     def test_full_booking_conversation_uses_real_backend(self):
         ai.LLM=Fake(tc('search_availability',check_in=day(10),check_out=day(12),adults=2,children=0,ac=True),{'content':'Room 101 is Rs 2,240 per night. Shall I book it?'})
         o=ai.reply(self.db,None,'Two adults AC room '+day(10)+' to '+day(12));tok=o['token'];self.assertIn('Room 101',o['reply'])
-        tool=self.db.execute("SELECT content FROM ai_messages WHERE role='tool'").fetchone()[0];self.assertEqual(json.loads(tool)['count'],2)
+        tool=self.db.execute("SELECT content FROM ai_messages WHERE role='tool'").fetchone()[0];search=json.loads(tool);self.assertEqual(search['count'],2)
         cq=dict(room_id=1,check_in=day(10),check_out=day(12),adults=2,children=0,name='Asha Kumar',phone='9876543210')
+        cq['confirmed_total_rupees']=next(room['total_rupees'] for room in search['rooms'] if room['room_id']==1)
         ai.LLM=Fake(tc('create_booking',confirmation_quote='tell me more',**cq),{'content':'I need your confirmation first.'})
         ai.reply(self.db,tok,'tell me more');self.assertEqual(self.db.execute('SELECT COUNT(*) FROM reservations').fetchone()[0],0)
         ai.LLM=Fake(tc('create_booking',confirmation_quote='yes, please confirm',**cq),{'content':'Booked!'})
@@ -113,8 +156,10 @@ class Web(Base):
         home=c.get('/').get_data(as_text=True)
         self.assertIn('href="/about"',home);self.assertIn('href="/search"',home);self.assertIn('Book a Stay',home)
         self.assertIn('Watch venue videos',home);self.assertIn('tab=video&amp;menu_slider=0',home);self.assertIn('data-slide-next',home)
-        self.assertEqual(home.count('id="chat"'),1);self.assertIn('Kabita virtual receptionist',home);self.assertNotIn('IRA',home)
-        for text in ('Welcome to Vijay Utsav Hall','Premium hospitality. Elegant stays. Memorable celebrations.','Located near Sikhar More on Gaya-Nawada Road','Accommodation enquiries','Weddings and receptions','Family celebrations','Guest assistance','Check room availability','Enquire about an event','View gallery','Contact the property','Talk to Kabita','Gather for life’s special moments.','See the place for yourself.'):
+        self.assertEqual(home.count('id="chat"'),1);self.assertIn('VIRA virtual receptionist',home);self.assertNotIn('Chat with IRA',home)
+        for control in ('id="chat-mic"','id="chat-speak"','id="chat-pause"','id="chat-stop"','id="chat-mute"','data-voice-enabled='):
+            self.assertIn(control,home)
+        for text in ('Welcome to Vijay Utsav Hall','Premium hospitality. Elegant stays. Memorable celebrations.','Located near Sikhar More on Gaya-Nawada Road','Accommodation enquiries','Weddings and receptions','Family celebrations','Guest assistance','Check room availability','Enquire about an event','View gallery','Contact the property','Talk to VIRA','Gather for life’s special moments.','See the place for yourself.'):
             self.assertIn(text,home)
         about=c.get('/about').get_data(as_text=True)
         for text in ('Wedding, marriage function and reception enquiries.','Housekeeping and guest assistance, subject to property confirmation.','Our vision','Our mission'):

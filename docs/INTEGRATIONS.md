@@ -1,10 +1,10 @@
 # Integration guides
 ## AI receptionist
-1. Create an API key with an OpenAI-compatible provider that supports tool calling.
-2. Set `LLM_API_KEY`, `LLM_MODEL` and (if not OpenAI) `LLM_BASE_URL` in `.env`; restart.
-3. Test in the chat widget: ask for a room, confirm, then check Admin > Bookings (source "ai") and Admin > AI conversations.
-Without `LLM_API_KEY`, Kabita uses a limited local fallback: it can ask for missing stay dates, search live availability for ISO dates or simple requests such as “tomorrow for 2 nights”, and route event enquiries to the event form. It is not model-powered and cannot complete multi-step booking or general receptionist tasks. Set the key in the local `.env` file and restart Flask to enable provider-backed tool calling. Never commit the `.env` file or paste the key into chat. Conversations are stored (privacy policy mentions this).
-Safety rules enforced in code (not only in the prompt): bookings need an earlier availability search in the same chat and an explicit "yes" as the guest's latest message.
+1. An OpenAI-compatible API key is optional for room availability and guided room reservations. To enable provider-backed general questions, set `LLM_API_KEY`, `LLM_MODEL` and (if not OpenAI) `LLM_BASE_URL` in `.env`; restart.
+2. The chat microphone and speech playback use browser-native Web Speech APIs. Set `VIRA_VOICE_ENABLED=0` to disable speech input, `VIRA_TTS_ENABLED=0` to disable spoken responses, and `VIRA_SPEECH_LANG` to choose the default recognition locale. Voice availability depends on the browser and a secure context; text chat remains available.
+3. Configure `SMTP_HOST`, `SMTP_FROM`, and optionally `SMTP_USER`/`SMTP_PASSWORD` for email, and `WHATSAPP_TOKEN` plus `WHATSAPP_PHONE_ID` for WhatsApp. Booking notification attempts and skipped/failed providers are recorded under Admin > Notifications.
+4. Test in the chat widget: provide stay details, select an available room, confirm the summary, and check Admin > Bookings (source "ai") and Admin > AI conversations. VIRA uses the existing availability and reservation services; confirmed AI reservations use Pay at Hotel.
+Safety rules enforced in code (not only in the prompt): bookings require a fresh backend availability search in the same chat and explicit confirmation as the guest's latest message. Conversations are stored (privacy policy mentions this). Never commit `.env` or paste secrets into chat.
 ## Razorpay
 1. Dashboard > Settings > API Keys: use **Test mode** keys first. Set `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET`.
 2. Webhooks: add `https://YOURDOMAIN/api/payments/webhook`, events `payment.captured` and `payment.failed`, set a secret and put it in `RAZORPAY_WEBHOOK_SECRET`.

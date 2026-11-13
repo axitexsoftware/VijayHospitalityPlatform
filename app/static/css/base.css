@@ -8,7 +8,7 @@
  --type-caption:12px;--type-label:13px;--type-button:14px;--type-body:16px;--type-card-title:22px;--type-subheading:26px;--type-section-title:36px;--type-page-title:46px;--type-hero:66px;
  --font-heading:"Cormorant Garamond","Iowan Old Style","Palatino Linotype",Georgia,serif;--font-body:"Inter","Segoe UI",Arial,sans-serif;--serif:var(--font-heading);--sans:var(--font-body);
  --maroon:var(--color-royal-wine);--maroon-d:var(--color-wine-deep);--orange:var(--color-antique-gold);--orange-d:var(--color-gold-text);--cream:var(--color-warm-ivory);--paper:var(--color-pure-white);--ink:var(--color-espresso);--mu:var(--color-muted-text);--line:var(--color-border);
- --r:6px;--sh:0 2px 8px rgba(41,39,37,.045),0 8px 20px rgba(41,39,37,.035);--content-width:1280px;--page-gutter:36px;
+ --r:6px;--sh:0 2px 8px rgba(41,39,37,.045),0 8px 20px rgba(41,39,37,.035);--content-width:1200px;--page-gutter:36px;
 }
 *,*::before,*::after{box-sizing:border-box}
 html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}

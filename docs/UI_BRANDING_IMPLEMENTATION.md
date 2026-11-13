@@ -26,7 +26,7 @@
 - Shared form styling preserves existing names, actions, validation and CSRF behavior.
 - The search page uses the common site header and retains property contact information without rendering a second brand/navigation header.
 - Footer uses the brand palette and existing route/contact/location data.
-- Kabita remains connected to the existing `/api/chat` service and matches the public brand palette.
+- VIRA remains connected to the existing `/api/chat` service, with its voice controls styled separately and scoped to the receptionist widget.
 
 ## Images and Content
 

@@ -13,6 +13,12 @@ from app.services import booking as B,notify
 
 
 class ConfigurationTests(Base):
+    def test_legacy_receptionist_name_defaults_to_vira(self):
+        config=copy.deepcopy(HC.DEFAULT_CONFIG)
+        config['integrations']['ai']['assistant_name']='Kabita'
+        HC.save(self.db,config)
+        self.assertEqual(HC.load(self.db)['integrations']['ai']['assistant_name'],'VIRA')
+
     def test_configuration_rejects_secrets_unsupported_fields_and_unsafe_assets(self):
         config=copy.deepcopy(HC.DEFAULT_CONFIG)
         config['integrations']['payments']['RAZORPAY_KEY_SECRET']='must not be exported'

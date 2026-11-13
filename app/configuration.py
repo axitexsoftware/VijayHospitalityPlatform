@@ -114,7 +114,7 @@ DEFAULT_CONFIG = {
             'provider': 'openai-compatible',
             'base_url': 'https://api.openai.com/v1',
             'model': 'gpt-4o-mini',
-            'assistant_name': 'Kabita',
+            'assistant_name': 'VIRA',
             'instructions': '',
             'knowledge_base': '',
         },
@@ -341,7 +341,10 @@ def validate(raw):
 def load(db, runtime=None):
     row = db.execute('SELECT config_json FROM hotel_configuration WHERE id=1').fetchone()
     if row:
-        return validate(row['config_json'])
+        config=validate(row['config_json'])
+        if config['integrations']['ai']['assistant_name']=='Kabita':
+            config['integrations']['ai']['assistant_name']='VIRA'
+        return config
     config = copy.deepcopy(DEFAULT_CONFIG)
     if runtime:
         config['website']['site_url'] = runtime.get('SITE_URL', config['website']['site_url'])

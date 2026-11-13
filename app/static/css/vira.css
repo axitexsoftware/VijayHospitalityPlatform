@@ -1,0 +1,8 @@
+#chat .vira-voice{display:flex;align-items:center;gap:6px;min-height:42px;padding:5px 10px;border-bottom:1px solid var(--line);background:#fff}
+#chat .vira-voice button{min-width:32px;min-height:30px;border:1px solid #d9cfbf;border-radius:6px;background:#fff;color:var(--maroon);font:600 .8rem var(--sans);cursor:pointer}
+#chat .vira-voice button:hover,#chat .vira-voice button[aria-pressed=true]{background:var(--maroon);color:#fff}
+#chat .vira-voice #chat-mic{padding:0 9px}
+#chat-voice-status{flex:1;min-width:0;color:#514941;font-size:.72rem;line-height:1.2}
+#chat-voice-status[data-state=listening]{color:#a12727;font-weight:700}
+#chat-voice-status[data-state=error]{color:#a12727}
+#chat .vira-voice button:disabled{opacity:.45;cursor:not-allowed}
