@@ -44,6 +44,14 @@ def series(db,start,end,group='day'):
 def series_totals(data):
     keys=('bookings','booked','collected','cancels','checkins','checkouts')
     return {key:sum(row[key] for row in data) for key in keys}
+def financial_period(db,start,end,collected):
+    row=db.execute("""SELECT
+        COALESCE(SUM(CASE WHEN kind='operating' THEN amount_paise ELSE 0 END),0) operating,
+        COALESCE(SUM(CASE WHEN kind='capital' THEN amount_paise ELSE 0 END),0) investment
+        FROM expense_entries WHERE incurred_on BETWEEN ? AND ?""",(start,end)).fetchone()
+    operating=row['operating'];investment=row['investment'];net_return=collected-operating
+    return dict(operating=operating,investment=investment,net_return=net_return,
+                roi_pct=round(net_return/investment*100,1) if investment else 0)
 def summary(db,start,end):
     a=d(start);b=d(end);days=(b-a).days+1;rooms=one(db,"SELECT COUNT(*) FROM rooms WHERE status='active'")
     sold=one(db,f"SELECT COUNT(*) FROM room_nights n JOIN reservations s ON s.id=n.reservation_id WHERE s.status IN{LIVE} AND n.night BETWEEN ? AND ?",(start,end))

@@ -736,7 +736,8 @@ def reports():
         if d(start)>d(end):raise ValueError
     except Exception:flash('Choose valid dates.','error');start=(today()-dtm.timedelta(days=29)).isoformat();end=today().isoformat()
     ser=R.series(db,start,end,grp)
-    return render_template('admin/reports.html',s=R.summary(db,start,end),ser=ser,kpi_totals=R.series_totals(ser),start=start,end=end,grp=grp,period=grp,svg=R.svg_bars)
+    expenses=db.execute('SELECT id,kind,category,description,amount_paise,incurred_on FROM expense_entries WHERE incurred_on BETWEEN ? AND ? ORDER BY incurred_on DESC,id DESC',(start,end)).fetchall()
+    return render_template('admin/reports.html',s=R.summary(db,start,end),ser=ser,kpi_totals=R.series_totals(ser),start=start,end=end,grp=grp,period=grp,svg=R.svg_bars,expenses=expenses)
 @bp.get('/reports/export.<fmt>')
 @require('reports')
 def reports_export(fmt):

@@ -322,7 +322,15 @@ class Web(Base):
         u={'id':1,'email':'x'};r=self.book(1,ci=0,co=2);P.record_manual(self.db,r['id'],'cash',100000,'',u);k=R.dashboard(self.db)
         self.assertEqual(k['total_rooms'],3);self.assertEqual(k['reserved'],1);self.assertEqual(k['available'],2);self.assertEqual(k['rev_day'],100000);self.assertEqual(k['checkins_today'],1)
         s=R.summary(self.db,day(0),day(1));self.assertEqual(s['nights_sold'],2);self.assertEqual(s['bookings'],1);self.assertEqual(s['ac'],2)
-        c,_=self.login();self.assertEqual(c.get('/admin/reports').status_code,200)
+        self.db.execute("INSERT INTO expense_entries(kind,category,description,amount_paise,incurred_on) VALUES('operating','Utilities','Power bill',10000,?)",(day(0),))
+        self.db.execute("INSERT INTO expense_entries(kind,category,description,amount_paise,incurred_on) VALUES('capital','Equipment','New mattress',20000,?)",(day(1),))
+        s=R.summary(self.db,day(0),day(1));self.assertEqual(s['operating'],10000);self.assertEqual(s['investment'],20000);self.assertEqual(s['net_return'],90000);self.assertEqual(s['roi_pct'],450)
+        c,_=self.login();page=c.get('/admin/reports',query_string={'from':day(0),'to':day(1)});html=page.get_data(as_text=True)
+        self.assertEqual(page.status_code,200);self.assertIn('Record an expense or investment',html);self.assertIn('Power bill',html);self.assertIn('New mattress',html)
+        token=self.csrf(c,'/admin/reports')
+        saved=c.post('/admin/expenses',data={'csrf_token':token,'kind':'operating','category':'Maintenance','description':'Water bill','amount':'50.25','incurred_on':day(0),'from':day(0),'to':day(1),'group':'day'})
+        self.assertEqual(saved.status_code,302);self.assertIn('from='+day(0),saved.headers['Location'])
+        self.assertEqual(self.db.execute("SELECT amount_paise FROM expense_entries WHERE category='Maintenance'").fetchone()[0],5025)
         x=c.get('/admin/bookings/export.xlsx');self.assertTrue(x.data.startswith(b'PK'));self.assertTrue(c.get('/admin/reports/export.pdf').data.startswith(b'%PDF'))
     def test_daily_report_series_has_zero_days_and_actual_event_counts(self):
         from app.services import booking as B,reports as R
